@@ -112,7 +112,7 @@ test('order puts findings in the fix order, FAIL before WARN within an area', ()
 test('the audit names every planted tell, a shot or a file and line for each, in fix order, and renders as a one-theme card', { skip: NO_CHROME }, async () => {
   const dir = fixture();
   // No --out: the audit writes to a fresh temp folder, never the cwd, and prints where.
-  const { out } = JSON.parse(execFileSync('node', [AUDIT, '--url', join(dir, 'src', 'index.html'), '--src', join(dir, 'src'), '--viewport', 'desktop', '--theme', 'light'], { cwd: dir, encoding: 'utf8' }));
+  const { out } = JSON.parse(execFileSync(process.execPath, [AUDIT, '--url', join(dir, 'src', 'index.html'), '--src', join(dir, 'src'), '--viewport', 'desktop', '--theme', 'light'], { cwd: dir, encoding: 'utf8' }));
   assert.ok(out.startsWith(tmpdir()) && !existsSync(join(dir, '.design-audit')), out);
   const audit = JSON.parse(readFileSync(join(out, 'audit.json'), 'utf8'));
   assert.deepEqual(ids(audit.findings), [...PLANTED_SOURCE, ...PLANTED_MEASURED].sort());
@@ -123,7 +123,7 @@ test('the audit names every planted tell, a shot or a file and line for each, in
   assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
 
   const card = JSON.parse(readFileSync(join(out, 'card.json'), 'utf8'));
-  execFileSync('node', [join(SKILLS, 'design-spec', 'scripts', 'fill.mjs'), join(SKILLS, 'design-spec', 'assets', 'card.html'), join(out, 'card.json'), join(out, 'card.html')], { stdio: 'pipe' });
+  execFileSync(process.execPath, [join(SKILLS, 'design-spec', 'scripts', 'fill.mjs'), join(SKILLS, 'design-spec', 'assets', 'card.html'), join(out, 'card.json'), join(out, 'card.html')], { stdio: 'pipe' });
   const browser = await launchBrowser({ warn: () => {} });
   try {
     const page = await browser.newPage();

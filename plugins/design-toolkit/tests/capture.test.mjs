@@ -21,7 +21,7 @@ const FIXTURE = `<!doctype html><html><head><style>
 </style></head><body><div id="box"></div><div id="attr"></div></body></html>`;
 
 function capture(args) {
-  return JSON.parse(execFileSync('node', [CAPTURE, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+  return JSON.parse(execFileSync(process.execPath, [CAPTURE, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
 }
 
 // PNG IHDR: width and height are big-endian at byte offsets 16 and 20.
@@ -67,7 +67,7 @@ test('--theme-attr reaches a theme set by an attribute, not the media query', { 
 
 test('a selector that matches nothing fails loudly', { skip: NO_CHROME }, () => {
   const dir = workdir();
-  const run = spawnSync('node', [CAPTURE, '--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#missing', '--theme', 'light'], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#missing', '--theme', 'light'], { encoding: 'utf8' });
   assert.equal(run.status, 1);
   assert.match(run.stderr, /--selector "#missing" matched nothing/);
 });

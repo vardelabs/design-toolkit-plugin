@@ -166,7 +166,7 @@ function page(html) {
 }
 
 function inspect(file, ...args) {
-  const run = spawnSync('node', [INSPECT, '--url', file, '--json', ...args], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [INSPECT, '--url', file, '--json', ...args], { encoding: 'utf8' });
   assert.notEqual(run.status, 2, run.stderr);
   return { status: run.status, report: JSON.parse(run.stdout) };
 }
@@ -262,7 +262,7 @@ test('the page end is read past the --screens cap', { skip: NO_CHROME }, () => {
 });
 
 test('a count option that is not a whole number is a usage error', () => {
-  const run = spawnSync('node', [INSPECT, '--url', page(CLEAN), '--screens', 'abc'], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [INSPECT, '--url', page(CLEAN), '--screens', 'abc'], { encoding: 'utf8' });
   assert.equal(run.status, 2);
   assert.match(run.stderr, /--screens "abc": use a whole number/);
 });
@@ -286,7 +286,7 @@ test('--ignore leaves one element out and names it in the report', { skip: NO_CH
 
 // Options are checked before a browser launches, so these run on any host.
 test('an unknown rule id is a usage error', () => {
-  const bad = spawnSync('node', [INSPECT, '--url', page(DARK_ONLY), '--allow', 'no-such-rule'], { encoding: 'utf8' });
+  const bad = spawnSync(process.execPath, [INSPECT, '--url', page(DARK_ONLY), '--allow', 'no-such-rule'], { encoding: 'utf8' });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /no-such-rule: not a rule id/);
 });
