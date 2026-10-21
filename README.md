@@ -33,7 +33,7 @@ The browser tests skip when no browser is installed.
 
 ## Contributing
 
-Pull requests are welcome. See `CONTRIBUTING.md` for the tests to run and the version bump each change needs.
+Pull requests are welcome. See `CONTRIBUTING.md` for the tests to run and how a merged change gets released.
 
 ## Licence
 

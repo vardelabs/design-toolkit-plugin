@@ -1,6 +1,6 @@
 # Design Toolkit
 
-**Version:** 0.9.2 | **Status:** Beta | **Author:** Varde Labs
+**Version:** 0.9.1 | **Status:** Beta | **Author:** Varde Labs
 
 Design review tooling for UI work: `design-spec` makes the review material, `ui-inspect` measures the screen first, `design-audit` lists what is generic or broken on an existing screen, and `clean-copy` cuts interface copy that should not exist.
 

@@ -10,15 +10,7 @@ Pull requests are welcome: bug fixes, new checks, clearer skill text, better tes
    node --test scripts/*.test.mjs 'plugins/design-toolkit/tests/*.test.mjs'
    ```
 
-2. **Raise the version** if your change touches anything under `plugins/design-toolkit/`. Claude Code installs a new copy of a plugin only when its version changes, so without a bump nobody gets your change.
-
-   ```bash
-   node scripts/version.mjs bump patch
-   ```
-
-   Use `patch` for a fix, `minor` for a new feature or a new check, and `major` for a change that breaks how people use the plugin today. The script updates every file that holds the version, so they stay in step. If another PR merges first with the same version, merge `main` into your branch and bump again.
-
-A check on each PR fails when the plugin changed and the version did not go up, or when the files disagree about the version.
+2. **Leave the version alone.** Each release sets it, to match the version of Varde Labs' own copy of the plugin. A check on each PR fails when the version changes.
 
 ## Style
 
@@ -29,7 +21,7 @@ A check on each PR fails when the plugin changed and the version did not go up, 
 
 ## After Your PR Merges
 
-This repository is published from Varde Labs' own copy of the plugin. A maintainer carries each merged PR into that copy, keeping you as the commit author. The next release then publishes it here.
+This repository is published from Varde Labs' own copy of the plugin. A maintainer carries each merged PR into that copy, keeping you as the commit author, and releases it with a new version. That release then publishes here, and `claude plugin update` picks it up.
 
 ## Licence
 
