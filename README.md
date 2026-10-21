@@ -26,10 +26,14 @@ Then start a new session. The skills load by themselves when a task fits them, f
 ## Tests
 
 ```bash
-node --test 'plugins/design-toolkit/tests/*.test.mjs'
+node --test scripts/*.test.mjs 'plugins/design-toolkit/tests/*.test.mjs'
 ```
 
 The browser tests skip when no browser is installed.
+
+## Contributing
+
+Pull requests are welcome. See `CONTRIBUTING.md` for the tests to run and the version bump each change needs.
 
 ## Licence
 
