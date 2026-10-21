@@ -10,7 +10,7 @@ Pull requests are welcome: bug fixes, new checks, clearer skill text, better tes
    node --test scripts/*.test.mjs 'plugins/design-toolkit/tests/*.test.mjs'
    ```
 
-2. **Leave the version alone.** Each release sets it, to match the version of Varde Labs' own copy of the plugin. A check on each PR fails when the version changes. Only release PRs, which a maintainer opens from a `release/` branch, skip it.
+2. **Leave the version alone.** Each release sets it, to match the version of Varde Labs' own copy of the plugin. A check on each PR fails when the version changes. Only release PRs, which a maintainer opens from a `release/` branch, skip it. Merge a release PR with a merge commit, never a squash.
 
 ## Style
 

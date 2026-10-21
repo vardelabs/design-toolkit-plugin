@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   version:
-    # A release PR from an org member sets the new version on purpose; every other PR must leave it alone.
+    # A release PR from a maintainer sets the new version on purpose; every other PR must leave it alone.
+    # Keyed on the login: the event reports a member with private org membership as CONTRIBUTOR.
     if: >-
       github.event_name == 'pull_request' &&
       !(startsWith(github.head_ref, 'release/') &&
-        contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association))
+        contains(fromJSON('["corvus-vardelabs", "desilvakai"]'), github.event.pull_request.user.login))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
