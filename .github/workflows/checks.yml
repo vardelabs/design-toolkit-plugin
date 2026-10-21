@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   version:
-    if: github.event_name == 'pull_request'
+    # A release PR from an org member sets the new version on purpose; every other PR must leave it alone.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !(startsWith(github.head_ref, 'release/') &&
+        contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
