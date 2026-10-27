@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -34,6 +34,7 @@ const BROKEN = `<!doctype html><html><head><style>
   <p class="row">${[13, 14, 15, 17, 18, 19, 20, 21, 22].map((s) => `<span style="font-size:${s}px">Size</span>`).join(' ')}</p> <!-- size-count -->
   <p class="row" style="width: 1100px">${LONG}</p>                                           <!-- measure -->
   <div class="row" style="width: 300px; height: 60px; overflow-x: auto"><div style="width: 2000px; height: 50px">Wide row</div></div> <!-- side-scroll -->
+  <div class="row" style="display: flex; align-items: flex-start; line-height: 28px"><svg width="12" height="12"><rect width="100%" height="100%"/></svg><span>Icon at the top</span></div> <!-- optical-align -->
 </body></html>`;
 
 const CLEAN = `<!doctype html><html><head><style>
@@ -159,6 +160,43 @@ const SCROLL_Y_PANE = `<!doctype html><html><head><style>
   <div style="margin: 16px; width: 120px; height: 60px; overflow-x: hidden"><p style="margin: 0; line-height: 20px">Some words on the first lines here then https://example.test/a/very/long/unbroken/address/path</p></div>
 </body></html>`;
 
+// Each icon is placed by an oracle the rule does not share: the baseline from an empty inline-block at
+// the text's baseline, and the glyph height from the ink of a 10x glyph drawn to a canvas. The rows sit
+// below the first screen, so the rule must scroll to read them, and the page's CSP allows no data: images.
+const ALIGN = `<!doctype html><html><head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <style>
+  body { margin: 0; background: #fff; color: #111; font: 15px/24px system-ui, sans-serif; }
+  .row { margin: 16px; gap: 8px; align-items: start; }
+  svg { position: relative; }
+</style></head><body>
+  <div style="height: 2500px"></div>
+  <div class="row centred" style="display: flex"><svg width="14" height="14" data-glyph="H" data-shift="0"><rect width="100%" height="100%"/></svg><span>Header centred</span></div>
+  <div class="row notice" style="display: grid; grid-template-columns: auto 1fr"><span class="glyph"><svg width="14" height="14" data-glyph="H" data-shift="1.25"><rect width="100%" height="100%"/></svg></span><span>Notice one quarter low</span></div>
+  <button class="row group-toggle" style="display: flex; font: inherit; border: 0; background: none; color: inherit; padding: 0"><svg class="caret" width="10" height="10" data-glyph="x" data-shift="0"><rect width="100%" height="100%"/></svg><span>Workspace</span></button>
+  <div class="row badge" style="display: flex; position: relative"><span style="width: 14px"><svg width="14" height="14" style="position: absolute; top: 9px"><rect width="100%" height="100%"/></svg></span><span>Badge laid over its row</span></div>
+  <div class="row zero" style="display: flex; font-size: 0"><svg width="14" height="14"><rect width="100%" height="100%"/></svg>Delete</div>
+  <script>
+    const inkHeight = (font, glyph) => {
+      const c = document.createElement('canvas'); c.width = 400; c.height = 400;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.font = font; g.fillText(glyph, 50, 300);
+      const ink = g.getImageData(0, 0, 400, 400).data;
+      for (let y = 0; y < 300; y++) for (let x = 0; x < 400; x++) if (ink[(y * 400 + x) * 4 + 3] > 127) return (300 - y) / 10;
+    };
+    for (const icon of document.querySelectorAll('svg[data-glyph]')) {
+      const text = icon.closest('.row').querySelector(':scope > span:not(.glyph)');
+      const cs = getComputedStyle(text);
+      const marker = text.appendChild(document.createElement('i'));
+      marker.style.display = 'inline-block';
+      const baseline = marker.getBoundingClientRect().bottom;
+      const glyph = inkHeight(\`\${cs.fontWeight} \${parseFloat(cs.fontSize) * 10}px \${cs.fontFamily}\`, icon.dataset.glyph);
+      const box = icon.getBoundingClientRect();
+      icon.style.top = (baseline - glyph / 2 + Number(icon.dataset.shift) - (box.top + box.height / 2)) + 'px';
+    }
+  </script>
+</body></html>`;
+
 function page(html) {
   const dir = mkdtempSync(join(tmpdir(), 'ui-inspect-test-'));
   writeFileSync(join(dir, 'page.html'), html);
@@ -259,6 +297,40 @@ test('a sticky header in a scrolled pane is judged by the pane, not the window',
 test('the page end is read past the --screens cap', { skip: NO_CHROME }, () => {
   const { report } = inspect(page(LONG_PAGE), '--viewport', 'desktop', '--theme', 'light', '--screens', '1');
   assert.match(report.findings.find((f) => f.id === 'covered-text')?.message ?? '', /The last line on the page/);
+});
+
+test('optical-align fails only the wrapped icon 1.25px low, and the excepted caret passes on the x-height', { skip: NO_CHROME }, () => {
+  const file = page(ALIGN);
+  const config = join(dirname(file), '.design-toolkit.json');
+  writeFileSync(config, JSON.stringify({ 'optical-align': { exceptions: [{ selector: '.group-toggle .caret', centre: 'x-height' }] } }));
+  const run = spawnSync(process.execPath, [INSPECT, '--url', file, '--json'], { encoding: 'utf8', cwd: dirname(file) });
+  const report = JSON.parse(run.stdout);
+  assert.equal(run.status, 1, run.stderr);
+  assert.equal(report.config, realpathSync(config));
+  const align = report.findings.filter((f) => f.id === 'optical-align');
+  assert.deepEqual(align.map((f) => [f.level, f.selectors, f.where.length]), [['FAIL', ['div.row.notice > span.glyph'], 4]]);
+  const gap = Number(/"Notice one quarter low" \(div\.row\.notice > span\.glyph\) ([\d.]+)px low against the cap height/.exec(align[0].message)?.[1]);
+  assert.ok(Math.abs(gap - 1.25) < 0.15, align[0].message);
+  assert.ok(align[0].fix);
+});
+
+test('without its exception, a caret centred on the x-height fails against the cap height', { skip: NO_CHROME }, () => {
+  const file = page(ALIGN);
+  writeFileSync(join(dirname(file), 'empty.json'), '{}');
+  const { report } = inspect(file, '--viewport', 'desktop', '--theme', 'light', '--config', join(dirname(file), 'empty.json'));
+  assert.match(report.findings.find((f) => f.id === 'optical-align').message, /"Workspace" \(button\.row\.group-toggle > svg\.caret\) [\d.]+px low against the cap height/);
+});
+
+test('a config that is not valid JSON, or whose exceptions are wrong, is a usage error naming the file', () => {
+  const file = page(CLEAN);
+  const config = join(dirname(file), '.design-toolkit.json');
+  const bad = ['{"optical-align": ', { 'optical-align': { exceptions: { selector: '.caret', centre: 'x-height' } } }, { 'optical-align': { exceptions: [{ selector: '.caret', centre: 'middle' }] } }];
+  for (const content of bad) {
+    writeFileSync(config, typeof content === 'string' ? content : JSON.stringify(content));
+    const run = spawnSync(process.execPath, [INSPECT, '--url', file], { encoding: 'utf8', cwd: dirname(file) });
+    assert.equal(run.status, 2, run.stderr);
+    assert.ok(run.stderr.includes(`inspect: ${realpathSync(config)}: `), run.stderr);
+  }
 });
 
 test('a count option that is not a whole number is a usage error', () => {

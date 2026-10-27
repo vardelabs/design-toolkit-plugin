@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Design review tooling for UI work, as a Claude Code plugin.",
-    "version": "0.9.2"
+    "version": "0.10.0"
   },
   "plugins": [
     {
       "name": "design-toolkit",
       "source": "./plugins/design-toolkit",
-      "description": "Design review tooling for UI work. Founding skill: design-spec, which makes the review material for a UI change: a quick card (one composed image) or a full sheet (a claude.ai Artifact republished each round), built from a state inventory checked against the server contract and captured headless at fixed viewports, 2x, in light and dark. ui-inspect measures the screen first: overflow, clipped or covered text, contrast, and font faults, at the same viewports and themes. design-audit lists what is generic or broken on an existing screen, in the order to fix it. clean-copy cuts interface copy that should not exist and shapes what survives, error messages included.",
-      "version": "0.9.2",
+      "description": "Design review tooling for UI work. Founding skill: design-spec, which makes the review material for a UI change: a quick card (one composed image) or a full sheet (a claude.ai Artifact republished each round), built from a state inventory checked against the server contract and captured headless at fixed viewports, 2x, in light and dark. ui-inspect measures the screen first: overflow, clipped or covered text, contrast, font faults, and icon alignment, at the same viewports and themes. design-audit lists what is generic or broken on an existing screen, in the order to fix it. clean-copy cuts interface copy that should not exist and shapes what survives, error messages included.",
+      "version": "0.10.0",
       "author": {
         "name": "Varde Labs"
       }
