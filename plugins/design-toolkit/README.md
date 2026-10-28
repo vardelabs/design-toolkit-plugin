@@ -1,6 +1,6 @@
 # Design Toolkit
 
-**Version:** 0.9.2 | **Status:** Beta | **Author:** Varde Labs
+**Version:** 0.10.1 | **Status:** Beta | **Author:** Varde Labs
 
 Design review tooling for UI work: `design-spec` makes the review material, `ui-inspect` measures the screen first, `design-audit` lists what is generic or broken on an existing screen, and `clean-copy` cuts interface copy that should not exist.
 
@@ -13,7 +13,7 @@ See the repository README.
 | Skill | Fires on | Purpose |
 |---|---|---|
 | `design-spec` | Sending screenshots of a UI change, a reviewer asking to see a UI change or its states, a PR that changes a screen | Makes a quick card (one composed image) or a full sheet (a claude.ai Artifact republished each round). Starts from a state inventory checked against the server contract, captures headless at fixed viewports, 2x, light and dark, and checks the material before it goes out. |
-| `ui-inspect` | Before capturing review material, after changing an app screen, "is anything clipped" | Measures the rendered screen at the design-spec viewports in light and dark: overflow, clipped and covered text, contrast, font fallback, broken images, small text, type sizes and faces, line length, sideways rows. Each FAIL and WARN carries a fix. |
+| `ui-inspect` | Before capturing review material, after changing an app screen, "is anything clipped" | Measures the rendered screen at the design-spec viewports in light and dark: overflow, clipped and covered text, contrast, font fallback, broken images, small text, type sizes and faces, line length, sideways rows, and icons off the middle of their text, with per-repo exceptions in `.design-toolkit.json`. Each FAIL and WARN carries a fix. |
 | `design-audit` | Before a redesign, a page that "looks AI-made", "audit this page" | Lints the source for generated-page tells (app or site rule set), measures the page with ui-inspect, captures it in light and dark, and orders every finding by the fix order with the shot that shows it. Presents through a design-spec card. Reports, never edits. |
 | `clean-copy` | Writing or reviewing any user-facing string, "clean up the copy" | Cuts interface copy that should not exist (restated labels, pre-empted worries, scar tissue from fixed bugs) by a four-rung ladder, keeps legal, accessibility and safety text, and sets the shape of an error message. Reports each string as `file:line` with a rewrite or `cut`. |
 

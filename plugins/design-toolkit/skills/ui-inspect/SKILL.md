@@ -1,6 +1,6 @@
 ---
 name: ui-inspect
-description: Measures an app screen in a real headless browser and reports what a reviewer would only catch by eye if a screenshot happened to show it. It checks sideways overflow, text cut off by its box, text covered by another element, low contrast, a font that fell back, broken images, text under 12px, too many type sizes or typefaces, an overlong line, and rows that scroll sideways. It runs at the design-spec viewports in light and dark, and gives each FAIL and WARN a fix. Use before capturing review material for a UI change, after building or changing an app screen, or on "inspect this screen", "check the UI for overflow", "is anything clipped". Do NOT use for marketing-page art direction, or as a substitute for looking at the shots.
+description: Measures an app screen in a real headless browser and reports what a reviewer would only catch by eye if a screenshot happened to show it. It checks sideways overflow, text cut off by its box, text covered by another element, low contrast, a font that fell back, broken images, text under 12px, too many type sizes or typefaces, an overlong line, rows that scroll sideways, and icons that sit off the middle of the text beside them. It runs at the design-spec viewports in light and dark, and gives each FAIL and WARN a fix. Use before capturing review material for a UI change, after building or changing an app screen, or on "inspect this screen", "check the UI for overflow", "is anything clipped". Do NOT use for marketing-page art direction, or as a substitute for looking at the shots.
 ---
 
 # UI Inspect
@@ -29,6 +29,7 @@ It needs Node 22 or later and finds a browser the same way `design-spec` does.
 | `--screens` | `4` | Window scroll positions read below the first screen, plus the page end, which is always read. Content inside its own scrolling pane is read only where the pane rests. |
 | `--allow` | none | A rule id to skip. Repeat for several. |
 | `--ignore` | none | A CSS selector whose text and images every check leaves out. Repeat for several. Use it for one false positive instead of turning a whole rule off with `--allow`. |
+| `--config` | `.design-toolkit.json` in the working folder or the nearest folder above it | The repo's design config. See Repo Config. |
 | `--json` | off | Print the report as JSON, the shape the design-spec sheet takes as `checks`. A rule that fires with different evidence at two viewports or themes is two findings. |
 
 Use the same `--viewport`, `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, and `--blur` as the capture, so each fixture state is checked as it is shot.
@@ -52,6 +53,21 @@ Exit 0 means no FAIL, exit 1 means at least one FAIL, and exit 2 means the run i
 | `size-count` | WARN | More than nine font sizes. |
 | `measure` | WARN | Running text over about 88 characters per line, at desktop widths. |
 | `side-scroll` | WARN | A row that scrolls sideways with content past its edge. Tables, grids, tab lists, and elements marked `data-scroll-x` are skipped. |
+| `optical-align` | FAIL at 0.75px or more | A small icon (`svg`, `img`, or `canvas`, 8 to 28px tall) in a flex or grid row whose ink sits off the middle of a capital letter beside it. A line box can be centred while its letters read high or low, so the letters are the test. Text and icons snap to the pixel grid, so the gap is read from the ink in a 2x screenshot of the icon and one flat-topped capital (such as H, E, or N), never from page geometry. Text with no such capital is not checked. A wrapper that holds only the icon, such as a grid cell or a button, is walked up to the row it sits in, and an absolutely positioned icon is skipped. The message gives the signed gap: low means the icon sits below the letter's middle. |
+
+## Repo Config
+
+A repo keeps its design exceptions in `.design-toolkit.json` at its root. Run ui-inspect from inside the repo, or pass `--config`. The report names the config it read.
+
+```json
+{
+  "optical-align": {
+    "exceptions": [{ "selector": ".group-toggle .caret", "centre": "x-height" }]
+  }
+}
+```
+
+An exception applies to an icon that matches `selector` or sits inside an element that does. `centre` is the height that icon centres on: `cap-height` (the default for every icon) or `x-height`, for a mark that reads with the lowercase letters, such as a fold caret on a group heading. An `x-height` icon is measured against a flat lowercase letter, such as n, r, or x.
 
 ## Acting on the Report
 
@@ -65,5 +81,6 @@ Exit 0 means no FAIL, exit 1 means at least one FAIL, and exit 2 means the run i
 |---|---|
 | `scripts/inspect.mjs` | Runs the checks at each viewport and theme, merges the findings, prints text or JSON. |
 | `scripts/lib/probe.mjs` | Runs in the page: type, contrast, overflow, and the per-scroll covered and clipped text checks. |
+| `scripts/lib/align.mjs` | The optical-align check: pairs each icon with a letter in the page, then reads both from a screenshot. |
 | `scripts/lib/rules.mjs` | Turns the measurements into FAIL and WARN findings with fixes. |
 | `scripts/lib/UPSTREAM` | The taste-skill commit these files are adapted from, and what changed. |

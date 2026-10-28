@@ -43,7 +43,7 @@ Label each state **Real server** or **Fixture: <what>**. Fixtures use synthetic 
 
 ## Step 2: Capture
 
-First run `design-toolkit:ui-inspect` on each screen and fixture state, with the same `--viewport`, `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, and `--blur` you will capture with. Fix every FAIL before you capture; a shot of a broken screen goes back for another round. Keep each `--json` report for the full sheet.
+First run `design-toolkit:ui-inspect` on each screen and fixture state, with the same `--viewport`, `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, and `--blur` you will capture with, from inside the app's repo so it reads the repo's `.design-toolkit.json`. Fix every FAIL before you capture; a shot of a broken screen goes back for another round. Keep each `--json` report for the full sheet.
 
 Use `scripts/capture.mjs`. It drives Chrome headless (Node 22+, no npm install), so every shot is a fresh paint of the final layout. It looks for `CHROME_PATH`, then an installed Chrome, Edge, or Chromium, then a Chromium that Playwright downloaded (`PLAYWRIGHT_BROWSERS_PATH`, `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright`, or `%LOCALAPPDATA%\ms-playwright`).
 
