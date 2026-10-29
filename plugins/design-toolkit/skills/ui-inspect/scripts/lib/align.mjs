@@ -75,19 +75,55 @@ function findPairs({ ignore, exceptions, key }) {
     const line = letter.getBoundingClientRect();
     // Text more than a line away from the icon is another row of a grid, not the icon's label.
     if (Math.abs(line.top + line.height / 2 - (box.top + box.height / 2)) > 14) continue;
-    pairs.push({ icon, letter, report: { text: text.textContent.trim().slice(0, 40), at: pathOf(item), centre } });
+    pairs.push({ icon, letter, row, report: { text: text.textContent.trim().slice(0, 40), at: pathOf(item), centre } });
   }
   window[key] = pairs;
   return pairs.map((p) => p.report);
 }
 
 // Brings a pair on screen and returns the clip that holds both, in document CSS px, and the column band of
-// each inside that clip, in image px.
+// each inside that clip, in image px. Returns null when another layer lies over the pair.
 function locatePair({ key, index }) {
-  const { icon, letter } = window[key][index];
+  const { icon, letter, row } = window[key][index];
   icon.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
   const a = icon.getBoundingClientRect();
   const l = letter.getBoundingClientRect();
+  // A layer that paints over the row (a dialog's scrim, often blurred, or a pinned bar) puts its own pixels
+  // in the screenshot, so the ink read there is not the icon's. A transparent layer, such as a stretched
+  // link, changes no pixel, and neither does a closed dialog left in the page at zero opacity. Hit-testing
+  // skips pointer-events: none, which would let a scrim that ignores the pointer pass as clear.
+  const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const alpha = (colour) => { swatch.clearRect(0, 0, 1, 1); swatch.fillStyle = colour; swatch.fillRect(0, 0, 1, 1); return swatch.getImageData(0, 0, 1, 1).data[3] / 255; };
+  const seen = (el) => {
+    let opacity = 1;
+    for (let p = el; p; p = p.parentElement) opacity *= +getComputedStyle(p).opacity;
+    return opacity > 0.05;
+  };
+  const range = document.createRange();
+  // Text paints only where its letters are, not across its element's box.
+  const textAt = (el, x, y) => [...el.childNodes].some((n) => {
+    if (n.nodeType !== 3 || !n.nodeValue.trim()) return false;
+    range.selectNodeContents(n);
+    return [...range.getClientRects()].some((r) => x >= r.left && x < r.right && y >= r.top && y < r.bottom);
+  });
+  const paints = (el, x, y) => seen(el) && (el.closest('svg, img, picture, canvas, video, iframe') || textAt(el, x, y)
+    || [null, '::before', '::after'].some((pseudo) => {
+      const cs = getComputedStyle(el, pseudo);
+      return alpha(cs.backgroundColor) > 0.05 || cs.backgroundImage !== 'none' || cs.backdropFilter !== 'none';
+    }));
+  const underLayer = (r) => {
+    const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (row.contains(el)) return false;
+      if (paints(el, x, y)) return true;
+    }
+    return true;
+  };
+  const hitStyle = document.head.appendChild(document.createElement('style'));
+  hitStyle.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
+  const covered = [a, l].some(underLayer);
+  hitStyle.remove();
+  if (covered) return null;
   const left = Math.floor(Math.min(a.left, l.left));
   const top = Math.floor(Math.min(a.top, l.top)) - 2;
   const right = Math.ceil(Math.max(a.right, l.right));
@@ -172,7 +208,9 @@ export async function alignment(page, { ignore, exceptions }) {
   const pairs = await page.eval(findPairs, { ignore, exceptions, key: PAIRS });
   const off = [];
   for (const [index, pair] of pairs.entries()) {
-    const { clip, bands, dpr } = await page.eval(locatePair, { key: PAIRS, index });
+    const located = await page.eval(locatePair, { key: PAIRS, index });
+    if (!located) continue;
+    const { clip, bands, dpr } = located;
     const image = decodePng(await page.screenshot({ format: 'png', clip }));
     const [icon, letter] = bands.map((band) => inkMiddle(image, band));
     if (icon === null || letter === null) continue;

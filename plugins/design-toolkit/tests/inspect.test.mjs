@@ -160,9 +160,34 @@ const SCROLL_Y_PANE = `<!doctype html><html><head><style>
   <div style="margin: 16px; width: 120px; height: 60px; overflow-x: hidden"><p style="margin: 0; line-height: 20px">Some words on the first lines here then https://example.test/a/very/long/unbroken/address/path</p></div>
 </body></html>`;
 
-// Each icon is placed by an oracle the rule does not share: the baseline from an empty inline-block at
-// the text's baseline, and the glyph height from the ink of a 10x glyph drawn to a canvas. The rows sit
-// below the first screen, so the rule must scroll to read them, and the page's CSP allows no data: images.
+// Places icons by an oracle the rule does not share: the baseline from an empty inline-block at the text's
+// baseline, and the glyph height from the ink of a 10x glyph drawn to a canvas. Each svg[data-glyph] gets the
+// middle of its ink (data-ink px below its top, else its box middle) data-shift px below the glyph's middle,
+// in the text data-label names.
+const PLACE = `  <script>
+    const inkHeight = (font, glyph) => {
+      const c = document.createElement('canvas'); c.width = 400; c.height = 400;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.font = font; g.fillText(glyph, 50, 300);
+      const ink = g.getImageData(0, 0, 400, 400).data;
+      for (let y = 0; y < 300; y++) for (let x = 0; x < 400; x++) if (ink[(y * 400 + x) * 4 + 3] > 127) return (300 - y) / 10;
+    };
+    for (const icon of document.querySelectorAll('svg[data-glyph]')) {
+      const text = icon.closest('.row').querySelector(icon.dataset.label ?? ':scope > span:not(.glyph)');
+      const cs = getComputedStyle(text);
+      const marker = text.appendChild(document.createElement('i'));
+      marker.style.display = 'inline-block';
+      const baseline = marker.getBoundingClientRect().bottom;
+      const glyph = inkHeight(\`\${cs.fontWeight} \${parseFloat(cs.fontSize) * 10}px \${cs.fontFamily}\`, icon.dataset.glyph);
+      const box = icon.getBoundingClientRect();
+      const inkMiddle = Number(icon.dataset.ink ?? box.height / 2);
+      icon.style.top = (baseline - glyph / 2 + Number(icon.dataset.shift) - (box.top + inkMiddle)) + 'px';
+    }
+  </script>
+`;
+
+// The rows sit below the first screen, so the rule must scroll to read them, and the page's CSP allows no
+// data: images.
 const ALIGN = `<!doctype html><html><head>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
   <style>
@@ -176,26 +201,33 @@ const ALIGN = `<!doctype html><html><head>
   <button class="row group-toggle" style="display: flex; font: inherit; border: 0; background: none; color: inherit; padding: 0"><svg class="caret" width="10" height="10" data-glyph="x" data-shift="0"><rect width="100%" height="100%"/></svg><span>Workspace</span></button>
   <div class="row badge" style="display: flex; position: relative"><span style="width: 14px"><svg width="14" height="14" style="position: absolute; top: 9px"><rect width="100%" height="100%"/></svg></span><span>Badge laid over its row</span></div>
   <div class="row zero" style="display: flex; font-size: 0"><svg width="14" height="14"><rect width="100%" height="100%"/></svg>Delete</div>
-  <script>
-    const inkHeight = (font, glyph) => {
-      const c = document.createElement('canvas'); c.width = 400; c.height = 400;
-      const g = c.getContext('2d', { willReadFrequently: true });
-      g.font = font; g.fillText(glyph, 50, 300);
-      const ink = g.getImageData(0, 0, 400, 400).data;
-      for (let y = 0; y < 300; y++) for (let x = 0; x < 400; x++) if (ink[(y * 400 + x) * 4 + 3] > 127) return (300 - y) / 10;
-    };
-    for (const icon of document.querySelectorAll('svg[data-glyph]')) {
-      const text = icon.closest('.row').querySelector(':scope > span:not(.glyph)');
-      const cs = getComputedStyle(text);
-      const marker = text.appendChild(document.createElement('i'));
-      marker.style.display = 'inline-block';
-      const baseline = marker.getBoundingClientRect().bottom;
-      const glyph = inkHeight(\`\${cs.fontWeight} \${parseFloat(cs.fontSize) * 10}px \${cs.fontFamily}\`, icon.dataset.glyph);
-      const box = icon.getBoundingClientRect();
-      icon.style.top = (baseline - glyph / 2 + Number(icon.dataset.shift) - (box.top + box.height / 2)) + 'px';
-    }
-  </script>
-</body></html>`;
+${PLACE}</body></html>`;
+
+// A tab whose close button sits beside its title, and a compose icon whose ink sits a pixel below its box
+// middle, beside its label. A dark title bar above them gives a blurring scrim ink to smear into the rows.
+// A stretched link with a label, and a closed dialog left at zero opacity, are layers that paint nothing there.
+// A modal dialog's ::backdrop paints.
+const SHELL = ({ shift, layer }) => `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 14px/20px system-ui, sans-serif; }
+  svg { position: relative; }
+  .bar { height: 12px; background: #222; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 4px 16px; font: inherit; color: inherit; }
+  .tab { width: 220px; height: 30px; padding: 0 4px 0 12px; background: #f1ece4; }
+  .tab-label { flex: 1; }
+  .tab-close { position: relative; display: grid; place-items: center; width: 22px; height: 22px; border: 0; padding: 0; background: none; }
+  .new-chat { border: 0; padding: 6px 10px; background: none; }
+  .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(6px); pointer-events: none; }
+  .stretched::after { content: ''; position: fixed; inset: 0; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(6px); }
+</style></head><body>
+  <div class="bar"></div>
+  <div class="row tab"><span class="tab-label">New Session</span><button class="tab-close"><svg width="12" height="12" data-glyph="N" data-shift="${shift}" data-label=".tab-label"><path d="M1 1L11 11M11 1L1 11" stroke="#111" stroke-width="2"/></svg></button></div>
+  <div class="bar"></div>
+  <button class="row new-chat"><svg width="16" height="16" data-glyph="N" data-shift="${shift}" data-ink="9"><rect x="2" y="2" width="8" height="14"/><rect x="11" y="10" width="4" height="6"/></svg><span>New Session</span><kbd>K</kbd></button>
+  ${{ scrim: '<div class="scrim" role="dialog" aria-modal="true"></div>', closed: '<div class="scrim" style="opacity: 0"></div>',
+    modal: '<dialog id="modal" style="top: 400px">Set up</dialog><script>modal.showModal()</script>',
+    link: '<a class="stretched" href="#">Open the session</a>' }[layer] ?? ''}
+${PLACE}</body></html>`;
 
 function page(html) {
   const dir = mkdtempSync(join(tmpdir(), 'ui-inspect-test-'));
@@ -320,6 +352,28 @@ test('without its exception, a caret centred on the x-height fails against the c
   writeFileSync(join(dirname(file), 'empty.json'), '{}');
   const { report } = inspect(file, '--viewport', 'desktop', '--theme', 'light', '--config', join(dirname(file), 'empty.json'));
   assert.match(report.findings.find((f) => f.id === 'optical-align').message, /"Workspace" \(button\.row\.group-toggle > svg\.caret\) [\d.]+px low against the cap height/);
+});
+
+const alignFindings = (html) => inspect(page(html), '--viewport', 'desktop', '--theme', 'light').report.findings.filter((f) => f.id === 'optical-align');
+
+test('optical-align reads a tab close button and an asymmetric icon by their ink, against their own labels', { skip: NO_CHROME }, () => {
+  assert.deepEqual(alignFindings(SHELL({ shift: 0 })), []);
+  const low = alignFindings(SHELL({ shift: 1.25 }));
+  assert.deepEqual(low.flatMap((f) => f.selectors).sort(), ['button.row.new-chat > svg', 'div.row.tab > button.tab-close']);
+  assert.match(low[0].message, /"New Session" \(div\.row\.tab > button\.tab-close\) [\d.]+px low/);
+});
+
+test('optical-align leaves out a pair a blurring scrim or a modal dialog\'s backdrop lies over', { skip: NO_CHROME }, () => {
+  for (const layer of ['scrim', 'modal']) {
+    assert.deepEqual(alignFindings(SHELL({ shift: 0, layer })), [], layer);
+    assert.deepEqual(alignFindings(SHELL({ shift: 1.25, layer })), [], layer);
+  }
+});
+
+test('optical-align still reads a pair under a labelled stretched link or a closed dialog at zero opacity', { skip: NO_CHROME }, () => {
+  for (const layer of ['link', 'closed']) {
+    assert.equal(alignFindings(SHELL({ shift: 1.25, layer })).flatMap((f) => f.selectors).length, 2, layer);
+  }
 });
 
 test('a config that is not valid JSON, or whose exceptions are wrong, is a usage error naming the file', () => {
