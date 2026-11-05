@@ -13,7 +13,7 @@ const NO_ARC = existsSync(join(SCRIPTS, 'lib', 'arc.sh')) ? false : 'no lib/arc.
 
 // Stand-ins for the commands the script hands the link to. Each logs its arguments, so a test reads what
 // would have opened without opening anything on the machine running it.
-function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true } = {}) {
+function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true, openWorks = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'open-sheet-test-'));
   const log = join(dir, 'calls.log');
   const stub = (name, body) => {
@@ -21,17 +21,17 @@ function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true } = {}) 
     chmodSync(join(dir, name), 0o755);
   };
   stub('uname', `echo ${system}`);
-  stub('open', 'exit 0');
+  stub('open', `exit ${openWorks ? 0 : 3}`);
   stub('pgrep', `exit ${arcRunning ? 0 : 1}`);
   stub('osascript', `cat > /dev/null; exit ${arcWorks ? 0 : 1}`);
-  return { dir, log };
+  return { dir, log, home: dir };
 }
 
 function run(env, args, scripts = SCRIPTS) {
-  const { dir, log } = env;
+  const { dir, log, home } = env;
   const result = spawnSync('sh', [join(scripts, 'open-sheet.sh'), ...args], {
     encoding: 'utf8',
-    env: { PATH: `${dir}:/usr/bin:/bin`, ...(env.mode && { DESIGN_SPEC_OPEN: env.mode }) },
+    env: { PATH: `${dir}:/usr/bin:/bin`, HOME: home, ...(env.mode && { DESIGN_SPEC_OPEN: env.mode }) },
   });
   let calls = [];
   try { calls = readFileSync(log, 'utf8').trim().split('\n').filter((l) => !/^(uname|pgrep)/.test(l)); } catch {}
@@ -68,6 +68,51 @@ test('an arc mode falls back to the default browser, in the same place, when tha
   assert.deepEqual(failed.calls, [`osascript - ${URL} foreground`, `open ${URL}`]);
   assert.match(failed.err, /arc browser is not available/);
   assert.deepEqual(run(stubs(), [URL, '--mode', 'arc-background']).calls, [`open -g ${URL}`]);
+});
+
+test('a republish to the same URL prints the link and opens nothing', () => {
+  const env = stubs();
+  run(env, [URL]);
+  const again = run(env, [URL, '--mode', 'browser-foreground']);
+  assert.equal(again.out, URL);
+  assert.deepEqual(again.calls, [`open -g ${URL}`]);
+});
+
+test('an arc tab counts as opened, and so does its fallback', { skip: NO_ARC }, () => {
+  const arc = stubs({ arcRunning: true });
+  run(arc, [URL]);
+  assert.deepEqual(run(arc, [URL]).calls, [`osascript - ${URL} background`]);
+  const fallback = stubs({ arcRunning: true, arcWorks: false });
+  run(fallback, [URL]);
+  assert.deepEqual(run(fallback, [URL]).calls, [`osascript - ${URL} background`, `open -g ${URL}`]);
+});
+
+test('another URL still opens, including one that is the start of an opened one', () => {
+  const env = stubs();
+  run(env, [`${URL}-2`]);
+  assert.deepEqual(run(env, [URL]).calls, [`open -g ${URL}-2`, `open -g ${URL}`]);
+});
+
+test('a mode that opened nothing leaves the first open still to come', () => {
+  const env = stubs();
+  run(env, [URL, '--mode', 'none']);
+  assert.deepEqual(run(env, [URL]).calls, [`open -g ${URL}`]);
+});
+
+test('a failed open reports its status and is tried again', () => {
+  for (const mode of ['browser-background', 'arc-background']) {
+    const env = stubs({ openWorks: false });
+    assert.equal(run(env, [URL, '--mode', mode]).status, 3, mode);
+    assert.equal(run(env, [URL, '--mode', mode]).calls.length, 2, mode);
+  }
+});
+
+test('a state folder that cannot be written still opens, and exits 0', () => {
+  const env = stubs();
+  const home = join(env.dir, 'a-file');
+  writeFileSync(home, '');
+  const result = run({ ...env, home }, [URL]);
+  assert.deepEqual([result.status, result.err, result.calls], [0, '', [`open -g ${URL}`]]);
 });
 
 test('off macOS it only prints the link', () => {

@@ -127,7 +127,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
    node <skill>/scripts/capture.mjs --url <scratch>/card.html --out <scratch> --name card --selector .card --margin 0 --theme light --viewport 1300x900
    ```
 
-4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). It is 2x: 2400 pixels wide.
+4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). Pass no `display: "render"` to `SendUserFile`, since that opens a side pane the reviewer did not ask for. Never open the card image in a browser: a browser is for published sheets only. It is 2x: 2400 pixels wide.
 
 ## Step 4: Build the Full Sheet
 
@@ -136,7 +136,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
    - `ref`, `status`, `round`, `title`, `summary`, `viewport`, `source`, `captured`. Write the `summary` and every `lookFor` line as Write for a Designer says.
    - `beforeLabel` and `afterLabel`: the column names for before and after. Name the real commits or branches, such as `Before (main @ 1a2b3c4)`; a sheet made after merge must not say "this branch".
    - `changes`: what changed since the last round. Round 1 leaves it empty.
-   - `colors`: one row per changed colour per theme: `token`, `where` (the places it is used), `theme`, `surface` (what it sits on), `target` (the ratio it must meet: 4.5 for text, 3 for large text and icons, or the target the repo sets), and `before` and `after`, each with a `text` colour, an opaque `ground` colour, and an optional see-through `tint` laid over the ground. The sheet computes every ratio from these values. Never type a ratio, and never read one off a screenshot. Leave it empty when no colour changed.
+   - `colors`: one row per changed colour per theme: `token`, `where` (the places it is used), `theme`, `surface` (what it sits on), `target` (the ratio it must meet: 4.5 for text, 3 for large text and icons, or the target the repo sets), and `before` and `after` (leave `before` out for a colour on a new element), each with a `text` colour, an opaque `ground` colour, and an optional see-through `tint` laid over the ground. The sheet computes every ratio from these values. Never type a ratio, and never read one off a screenshot. Leave it empty when no colour changed.
    - `zooms`: one entry per changed element: `label`, `lookFor`, and `before` and `after` crops in both themes. They show every captured pixel, so the change reads large.
    - `beforeAfter`: each changed screen, before from `main` and after from the branch, each with a `lookFor` line. With zooms present, these are the context.
    - `interactive`: one entry per element whose states need a pointer or the keyboard: hover, press, focus, a drag target, a menu that opens. See Interactive States below. Leave it empty for a change a screenshot shows in full.
@@ -154,7 +154,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 3. Publish it with the Artifact tool (`icon`: `layout` on the first publish), with every shot under `files` (for example `{"shots/composer-after-desktop-light.png": "<scratch>/shots/composer-after-desktop-light.png"}`).
 4. Each later round, republish **the same file path** so the URL stays the same. Put the URL in the PR body the first time.
 5. Right after each publish, close the app's artifact pane: call `mcp__ccd_view__close_pane` with pane `artifact`. On the Claude desktop app a publish opens that pane by itself, even when no editor tool touched the `.html`. Skip this step when the open mode is `app-pane`, or where the session has no such tool or is not on screen.
-6. Open the sheet the way the reviewer set: run `<skill>/scripts/open-sheet.sh <artifact URL>`. It prints the link, and the link always goes in the reply, whatever the mode. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `auto`:
+6. Right after each publish, run `<skill>/scripts/open-sheet.sh <artifact URL>`. It opens the sheet on the first publish only, the way the reviewer set. A republish to the same URL opens nothing, because the tab already open shows the new version on reload. The script remembers each URL it opened on this machine, so run it every round. It always prints the link, and the link always goes in the reply. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `auto`:
 
    | Mode | Opens |
    |---|---|
@@ -199,6 +199,7 @@ Read `references/critique.md` and check the rendered card or sheet against it. J
 - A quick card is one image that holds every state. No state is sent as a separate file.
 - Every before and after pair and every zoom says what to look for, naming the element and the change, and says so when a part is meant to stay the same.
 - Every changed colour is a row in `colors`, with its target.
+- Capture the filled sheet with `capture.mjs` and read its output: `pageErrors` must be empty. A sheet that throws stops rendering partway, and nothing else flags it.
 - Run `ui-inspect` on the filled sheet itself with `--ignore .sample --ignore .stage`. The colour samples show failing colours on purpose, and an interactive stage is the product's own screen, checked on its own.
 - The summary fits three lines: no red "runs N lines" note under it on the card or the desktop-width sheet.
 - Every frozen interactive state renders with no red "matched nothing" line, and the stand-in note says what the page cannot show.
@@ -212,7 +213,7 @@ Fix what fails, re-render, and check again. Then send it.
 |---|---|
 | `scripts/capture.mjs` | Headless capture: fixed viewports, 2x, both themes, crop, broken-image and page-error report. |
 | `scripts/fill.mjs` | Fills a template's JSON block from a data file through the shell, so no editor tool writes the `.html`. |
-| `scripts/open-sheet.sh` | Opens a published sheet by the reviewer's chosen mode, and prints its link. |
+| `scripts/open-sheet.sh` | Opens a published sheet once per URL by the reviewer's chosen mode, and always prints its link. |
 | `scripts/lib/page.mjs` | Viewports, themes, and page setup, shared with `ui-inspect` so both see the same page. |
 | `scripts/lib/launch-browser.mjs` | Picks the browser, retries once with `--no-sandbox` where a Linux host blocks the sandbox, and retries once with a fresh profile when Chrome hangs at start. |
 | `scripts/lib/playwright-chromium.mjs` | Finds a Chromium that Playwright downloaded, for hosts with no installed Chrome. |

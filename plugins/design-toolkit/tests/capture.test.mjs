@@ -237,6 +237,20 @@ test('the sheet renders every section, each optional one only when it has entrie
   assert.deepEqual(empty, lean);
 });
 
+test('a sheet with no parity or options key, and a colour with no before, still renders to the end', { skip: NO_CHROME }, async () => {
+  const { parity, options, ...rest } = sheetData();
+  const newColour = { token: '--new', where: 'New badge', theme: 'light', surface: 'page', target: 4.5, after: { text: '#6b6b76', ground: '#fcfcfc' } };
+  const seen = await inSheet({ ...rest, colors: [newColour] }, () => ({
+    headings: [...document.querySelectorAll('h2')].map((h) => h.textContent),
+    row: document.querySelector('table.colors tr:last-child')?.textContent,
+  }));
+  assert.equal(seen.headings.at(-1), 'Open Questions');
+  assert.ok(!seen.headings.includes('Reference Product Parity') && !seen.headings.includes('Options Considered'));
+  assert.match(seen.row, /New colour: no before/);
+  assert.match(seen.row, /New colour, passes/);
+  assert.doesNotMatch(seen.row, /Now passes|Still below/);
+});
+
 test('an audit sheet with findings and no change sections renders only what it holds', { skip: NO_CHROME }, async () => {
   const audit = { ...sheetData(), ...OPTIONAL, checks: null, beforeAfter: [], states: [], interactions: [], findings: [{ level: 'FAIL', area: 'colour', text: 'Pale words', fix: 'Darken them', where: 'desktop/light' }] };
   assert.deepEqual(await sheetHeadings(audit), ['What Changed Since the Last Round', 'Findings, in the Order to Fix Them', 'Open Questions']);

@@ -1,5 +1,6 @@
 #!/bin/sh
 # Opens a published sheet or page the way the reviewer chose, and always prints the link for the reply.
+# A URL opens once per machine: the tab already open shows a republish on reload, so a second tab is only noise.
 #
 #   open-sheet.sh <url> [--mode MODE]
 #
@@ -35,6 +36,14 @@ echo "$url"
 # Only macOS has an app to hand the link to; elsewhere the printed link is the whole job.
 [ "$(uname)" = "Darwin" ] || exit 0
 
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/design-toolkit"
+opened="$state_dir/opened-sheets"
+grep -Fxq -- "$url" "$opened" 2>/dev/null && exit 0
+
+open_in() {
+  if [ "$1" = background ]; then open -g "$url"; else open "$url"; fi
+}
+
 arc_ready=no
 if [ -f "$here/lib/arc.sh" ]; then
   . "$here/lib/arc.sh"
@@ -46,12 +55,16 @@ fi
 
 case "$mode" in
   app-pane|none) exit 0 ;;
-  browser-background) exec open -g "$url" ;;
-  browser-foreground) exec open "$url" ;;
+  browser-*) open_in "${mode#browser-}" || exit $? ;;
+  *)
+    # An arc mode: fall back to the default browser, in the same place, when that browser cannot take the tab.
+    place="${mode#arc-}"
+    if [ "$arc_ready" != yes ] || ! arc_running || ! arc_open "$url" "$place"; then
+      echo "open-sheet: the arc browser is not available, so the default browser opens it" >&2
+      open_in "$place" || exit $?
+    fi
+    ;;
 esac
 
-# An arc mode: fall back to the default browser, in the same place, when that browser cannot take the tab.
-place="${mode#arc-}"
-if [ "$arc_ready" = yes ] && arc_running && arc_open "$url" "$place"; then exit 0; fi
-echo "open-sheet: the arc browser is not available, so the default browser opens it" >&2
-if [ "$place" = background ]; then exec open -g "$url"; else exec open "$url"; fi
+# Only a tab that opened counts. A state folder that cannot be written costs an extra tab later, not this one.
+{ mkdir -p "$state_dir" && echo "$url" >> "$opened"; } 2>/dev/null || true
