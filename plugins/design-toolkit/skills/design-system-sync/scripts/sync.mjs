@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Rebuilds a repo's Design System library from its default branch, in a temporary detached worktree, and works out
 // the Artifact publish. It never publishes: only a session's Artifact tool can.
-//   node sync.mjs prepare [--repo-dir DIR] [--workdir DIR]
+//   node sync.mjs prepare [--repo OWNER/NAME] [--repo-dir DIR] [--workdir DIR]
 //   node sync.mjs plan --state FILE --live-dir DIR
+//   node sync.mjs check-tip --state FILE
 //   node sync.mjs cleanup --state FILE
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join, relative, resolve } from 'node:path';
@@ -20,6 +21,7 @@ const PUBLISHED_ROOT = 'project/';
 const NEVER_PUBLISHED = new Set(['project/design-system.json']);
 const CARD_PATH = /^project\/components\/([^/]+)\//;
 const STEP_TIMEOUT_MS = 600000;
+const REMOTE_URL = /^remote\.(.+)\.url\s.*[:/]([^/:\s]+\/[^/\s]+?)(?:\.git)?\/?$/;
 
 const atLeast = (version, floor) => {
   const [major, minor] = version.split('.').map(Number);
@@ -71,13 +73,26 @@ function runStep(argv, cwd) {
   });
 }
 
-function repoFacts(repoDir) {
-  const view = JSON.parse(runStep(['gh', 'repo', 'view', '--json', 'nameWithOwner,defaultBranchRef'], repoDir));
+function repoFacts(repoDir, named) {
+  const args = ['gh', 'repo', 'view', ...(named ? [named] : []), '--json', 'nameWithOwner,defaultBranchRef'];
+  const view = JSON.parse(runStep(args, repoDir));
   return { repo: view.nameWithOwner, branch: view.defaultBranchRef.name };
 }
 
-function tipOf(repoDir, branch) {
-  return runStep(['git', 'ls-remote', 'origin', `refs/heads/${branch}`], repoDir).split(/\s/)[0];
+// `gh` can name a repo other than `origin`, and a merge can be for a repo other than this checkout's.
+// The raw config value, because `git remote get-url` applies any url rewrite first.
+function remoteFor(repoDir, repo) {
+  // Exits 1 when the checkout has no remote at all, which is the same refusal as no matching remote.
+  const config = spawnSync('git', ['config', '--get-regexp', '^remote\\..*\\.url$'], { cwd: repoDir, encoding: 'utf8' });
+  const lines = config.stdout.split('\n');
+  const matches = lines.map((line) => line.match(REMOTE_URL)).filter(Boolean);
+  const found = matches.find(([, , name]) => name.toLowerCase() === repo.toLowerCase());
+  if (!found) throw new Error(`no remote of this checkout points at ${repo}: run from a checkout of it, or pass --repo-dir`);
+  return found[1];
+}
+
+function tipOf({ repoDir, remote, branch }) {
+  return runStep(['git', 'ls-remote', remote, `refs/heads/${branch}`], repoDir).split(/\s/)[0];
 }
 
 export function newFails(buildOutput, known = []) {
@@ -99,10 +114,11 @@ function buildInWorktree(checkout, config) {
   return { root: join(checkout, config.out), newFails: newFails(buildOutput, config.knownFails) };
 }
 
-function prepare({ 'repo-dir': repoDirArg, workdir }) {
+function prepare({ 'repo-dir': repoDirArg, workdir, repo: named }) {
   const repoDir = resolve(repoDirArg ?? '.');
-  const { repo, branch } = repoFacts(repoDir);
-  runStep(['git', 'fetch', 'origin', branch], repoDir);
+  const { repo, branch } = repoFacts(repoDir, named);
+  const remote = remoteFor(repoDir, repo);
+  runStep(['git', 'fetch', remote, branch], repoDir);
   const commit = runStep(['git', 'rev-parse', 'FETCH_HEAD'], repoDir).trim();
   const config = parseSyncConfig(runStep(['git', 'show', `${commit}:${CONFIG_NAME}`], repoDir));
   if (!config) throw new Error(`${repo} declares no design-system-sync in ${CONFIG_NAME} at ${commit}`);
@@ -112,7 +128,9 @@ function prepare({ 'repo-dir': repoDirArg, workdir }) {
   const workRoot = mkdtempSync(join(parent, 'design-system-sync-'));
   const checkout = join(workRoot, 'checkout');
   runStep(['git', 'worktree', 'add', '--detach', checkout, commit], repoDir);
-  const state = { repo, branch, commit, artifact: config.artifact, repoDir, workRoot, checkout };
+  const state = {
+    repo, branch, remote, commit, artifact: config.artifact, keepCards: config.keepCards ?? [], repoDir, workRoot, checkout,
+  };
   const stateFile = join(workRoot, 'state.json');
   writeFileSync(stateFile, JSON.stringify(state, null, 2));
   try {
@@ -130,13 +148,16 @@ const cardName = (path) => path.match(CARD_PATH)?.[1] ?? null;
 const uniqueCards = (paths) => [...new Set(paths.map(cardName).filter(Boolean))].sort();
 
 // builtFiles and liveFiles are paths relative to the artifact root; isChanged compares a path on both sides.
-export function planPublish(builtFiles, liveFiles, isChanged) {
+// A live card named by keepCards stays until a person retires it, because no build writes it.
+export function planPublish(builtFiles, liveFiles, isChanged, keepCards = []) {
   const built = builtFiles.filter((path) => path.startsWith(PUBLISHED_ROOT) && !NEVER_PUBLISHED.has(path));
   if (!built.includes(ENTRY)) throw new Error(`the build wrote no ${ENTRY}`);
   const live = new Set(liveFiles);
   const added = built.filter((path) => !live.has(path));
   const changed = built.filter((path) => live.has(path) && isChanged(path));
-  const removed = liveFiles.filter((path) => CARD_PATH.test(path) && !built.includes(path));
+  const notBuilt = liveFiles.filter((path) => CARD_PATH.test(path) && !built.includes(path));
+  const isKept = (path) => keepCards.some((prefix) => cardName(path).startsWith(prefix));
+  const removed = notBuilt.filter((path) => !isKept(path));
 
   const files = Object.fromEntries(built.filter((path) => path !== ENTRY).map((path) => [path, path]));
   for (const path of removed) files[path] = null;
@@ -147,10 +168,11 @@ export function planPublish(builtFiles, liveFiles, isChanged) {
     files,
     nothingToPublish: !touched.length && !removed.length,
     changedCards: uniqueCards([...touched, ...removed]).filter((card) => hasCard(liveFiles, card) && hasCard(built, card)),
+    keptCards: uniqueCards(notBuilt.filter(isKept)),
     addedCards: uniqueCards(added).filter((card) => !hasCard(liveFiles, card)),
     removedCards: uniqueCards(removed).filter((card) => !hasCard(built, card)),
     changedOther: touched.filter((path) => !CARD_PATH.test(path)).sort(),
-    readBack: touched.find((path) => CARD_PATH.test(path)) ?? touched[0] ?? null,
+    readBack: touched.find((path) => CARD_PATH.test(path)) ?? touched[0] ?? (removed.length ? ENTRY : null),
   };
 }
 
@@ -160,6 +182,7 @@ function plan({ state: stateFile, 'live-dir': liveDir }) {
     listFiles(state.root),
     listFiles(resolve(liveDir)),
     (path) => !sameBytes(join(state.root, path), join(resolve(liveDir), path)),
+    state.keepCards,
   );
   const file_path = join(state.root, result.file_path);
   return {
@@ -169,8 +192,13 @@ function plan({ state: stateFile, 'live-dir': liveDir }) {
     root: state.root,
     commit: state.commit,
     newFails: state.newFails,
-    tipMoved: tipOf(state.repoDir, state.branch) !== state.commit,
+    tipMoved: tipOf(state) !== state.commit,
   };
+}
+
+function checkTip({ state: stateFile }) {
+  const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+  return { commit: state.commit, tipMoved: tipOf(state) !== state.commit };
 }
 
 function cleanup({ state: stateFile }) {
@@ -180,15 +208,15 @@ function cleanup({ state: stateFile }) {
   return { removed: state.workRoot };
 }
 
-const COMMANDS = { prepare, plan, cleanup };
-const REQUIRED = { prepare: [], plan: ['state', 'live-dir'], cleanup: ['state'] };
+const COMMANDS = { prepare, plan, 'check-tip': checkTip, cleanup };
+const REQUIRED = { prepare: [], plan: ['state', 'live-dir'], 'check-tip': ['state'], cleanup: ['state'] };
 
 function main(argv) {
   const [command, ...rest] = argv;
   const { values } = parseArgs({
     args: rest,
     options: {
-      'repo-dir': { type: 'string' }, workdir: { type: 'string' }, state: { type: 'string' }, 'live-dir': { type: 'string' },
+      repo: { type: 'string' }, 'repo-dir': { type: 'string' }, workdir: { type: 'string' }, state: { type: 'string' }, 'live-dir': { type: 'string' },
     },
   });
   if (!COMMANDS[command]) throw new Error(`usage: sync.mjs ${Object.keys(COMMANDS).join('|')}`);
