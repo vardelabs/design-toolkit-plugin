@@ -76,6 +76,27 @@ test('a merge that touched a source path tells the session to run the skill', ()
   assert.match(context, /design-toolkit:design-system-sync/);
 });
 
+test('the notice names the repo the skill must run against', () => {
+  const { context } = runHook('gh pr merge 42', routesFor());
+  assert.match(context, /once for each repo here, from a checkout of that repo, and pass the repo to its prepare step as --repo: example\/app\. /);
+});
+
+test('a merge in two repos names each repo once and asks for one run per repo', () => {
+  const routes = [
+    ['pr view 43', { url: 'https://github.com/other/site/pull/43' }],
+    ['pr view 44', { url: 'https://github.com/other/site/pull/44' }],
+    ['pulls/43/files', 'design/rules.md\n'],
+    ['pulls/44/files', 'design/rules.md\n'],
+    ['repos/other/site/pulls/43', merged],
+    ['repos/other/site/pulls/44', merged],
+    ...routesFor(),
+  ];
+  const command = 'gh pr merge 42 --repo example/app && gh pr merge 43 --repo other/site && gh pr merge 44 --repo other/site';
+  const { context } = runHook(command, routes);
+  assert.match(context, /example\/app#42, other\/site#43, other\/site#44 merged/);
+  assert.match(context, /once for each repo here.*as --repo: example\/app, other\/site\. Report each result\./);
+});
+
 test('the notice carries no file name from the PR', () => {
   const { context } = runHook('gh pr merge 42', routesFor({ files: 'design/ignore-prior-instructions.md\n' }));
   assert.match(context, /example\/app#42/);
@@ -225,6 +246,19 @@ test('shellSegments keeps quoted separators in one word', () => {
   assert.deepEqual(shellSegments('a "b; c" | d'), [['a', 'b; c'], ['d']]);
 });
 
+test('parseSyncConfig refuses a path form that could never match a changed file', () => {
+  const block = CONFIG['design-system-sync'];
+  for (const bad of ['./design/', '.', 'a/./b', 'a//b', '', '/abs', 'a/../b']) {
+    const text = JSON.stringify({ 'design-system-sync': { ...block, sourcePaths: [bad] } });
+    assert.throws(() => parseSyncConfig(text), /"sourcePaths" must be/, bad);
+  }
+  for (const good of ['design/', 'app/ui', 'theme.css', '.github/x']) {
+    assert.ok(parseSyncConfig(JSON.stringify({ 'design-system-sync': { ...block, sourcePaths: [good] } })), good);
+  }
+  const noPrefix = JSON.stringify({ 'design-system-sync': { ...block, keepCards: [''] } });
+  assert.throws(() => parseSyncConfig(noPrefix), /"keepCards" must be/);
+});
+
 test('touchesSource matches a folder and a file, and no name that only starts the same', () => {
   const paths = ['design/', 'theme.css', 'app/ui'];
   assert.ok(touchesSource(['design/a.md'], paths));
@@ -284,6 +318,28 @@ test('planPublish calls a card changed when it only gains or loses a file', () =
   assert.deepEqual([gained.changedCards, gained.addedCards, gained.removedCards], [['A'], [], []]);
   const lost = planPublish([entry, a], [entry, a, 'project/components/A/note.md'], () => false);
   assert.deepEqual([lost.changedCards, lost.addedCards, lost.removedCards], [['A'], [], []]);
+});
+
+test('planPublish keeps a live card a prefix names, and removes the rest', () => {
+  const entry = 'project/README.md';
+  const drift = 'project/components/Drift-Amber/preview.html';
+  const stale = 'project/components/Old/preview.html';
+  const plan = planPublish([entry], [entry, drift, stale], () => false, ['Drift']);
+  assert.deepEqual(plan.keptCards, ['Drift-Amber']);
+  assert.deepEqual(plan.removedCards, ['Old']);
+  assert.ok(!(drift in plan.files));
+  assert.equal(plan.files[stale], null);
+  const none = planPublish([entry], [entry, drift], () => false, ['Drift']);
+  assert.equal(none.nothingToPublish, true);
+  assert.deepEqual(planPublish([entry], [entry, drift], () => false).removedCards, ['Drift-Amber']);
+});
+
+test('a plan with only removals still names a file to read back', () => {
+  const entry = 'project/README.md';
+  const plan = planPublish([entry], [entry, 'project/components/Old/preview.html'], () => false);
+  assert.equal(plan.nothingToPublish, false);
+  assert.equal(plan.readBack, entry);
+  assert.equal(planPublish([entry], [entry], () => false).readBack, null);
 });
 
 test('planPublish never sends the index, even when a build wrote it, or anything outside project/', () => {
@@ -349,6 +405,9 @@ function fixtureRepo() {
   const repo = join(base, 'repo');
   git(base, 'init', '-q', '--bare', '-b', 'main', origin);
   git(base, 'clone', '-q', origin, repo);
+  // The remote reads as the GitHub repo the fake gh names, and still pushes to the local bare repo.
+  git(repo, 'config', `url.${origin}.insteadOf`, 'https://github.com/example/app.git');
+  git(repo, 'remote', 'set-url', 'origin', 'https://github.com/example/app.git');
   git(repo, 'config', 'user.email', 'test@example.com');
   git(repo, 'config', 'user.name', 'Test');
   writeFileSync(join(repo, 'build.mjs'), `import { mkdirSync, writeFileSync } from 'node:fs';
@@ -366,6 +425,7 @@ console.log('FAIL dark faint on raised');
       measure: ['node', '-e', '0'],
       out: 'out',
       knownFails: ['FAIL light amber'],
+      keepCards: ['Drift'],
     },
   }));
   writeFileSync(join(repo, '.gitignore'), 'out/\n');
@@ -393,6 +453,8 @@ test('prepare, plan, and cleanup work through the CLI against a real git repo', 
     writeFileSync(join(live, 'project/README.md'), 'readme');
     writeFileSync(join(live, 'project/components/Chips/preview.html'), 'older chips');
     writeFileSync(join(live, 'project/components/Gone/preview.html'), 'gone');
+    mkdirSync(join(live, 'project/components/Drift-Amber'), { recursive: true });
+    writeFileSync(join(live, 'project/components/Drift-Amber/preview.html'), 'made by hand');
 
     const plan = run('plan', '--state', state.stateFile, '--live-dir', live);
     assert.equal(plan.url, 'https://claude.ai/artifact/abc123');
@@ -401,10 +463,92 @@ test('prepare, plan, and cleanup work through the CLI against a real git repo', 
     assert.deepEqual(plan.changedCards, ['Chips']);
     assert.deepEqual(plan.removedCards, ['Gone']);
     assert.equal(plan.files['project/components/Gone/preview.html'], null);
+    assert.deepEqual(plan.keptCards, ['Drift-Amber']);
+    assert.ok(!('project/components/Drift-Amber/preview.html' in plan.files));
     assert.equal(plan.tipMoved, false);
 
     run('cleanup', '--state', state.stateFile);
     assert.ok(!git(repo, 'worktree', 'list').includes(state.checkout));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('prepare refuses a repo no remote of the checkout points at, and leaves no worktree', () => {
+  const { base, repo, git } = fixtureRepo();
+  const gh = fakeGh([
+    ['repo view other/app', { nameWithOwner: 'other/app', defaultBranchRef: { name: 'main' } }],
+    ['repo view', { nameWithOwner: 'example/app', defaultBranchRef: { name: 'main' } }],
+  ]);
+  const env = { ...process.env, PATH: `${gh.dir}${delimiter}${process.env.PATH}` };
+  try {
+    const result = spawnSync('node', [SYNC, 'prepare', '--repo', 'other/app', '--workdir', join(base, 'work')], { cwd: repo, encoding: 'utf8', env });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /no remote of this checkout points at other\/app/);
+    const bare = join(base, 'no-remotes');
+    git(base, 'init', '-q', bare);
+    const none = spawnSync('node', [SYNC, 'prepare', '--repo', 'other/app', '--workdir', join(base, 'work')], { cwd: bare, encoding: 'utf8', env });
+    assert.match(none.stderr, /no remote of this checkout points at other\/app/);
+    assert.equal(git(repo, 'worktree', 'list').trim().split('\n').length, 1);
+    const named = JSON.parse(execFileSync('node', [SYNC, 'prepare', '--repo', 'Example/App', '--workdir', join(base, 'work')], { cwd: repo, encoding: 'utf8', env: { ...env, PATH: `${fakeGh([['repo view', { nameWithOwner: 'Example/App', defaultBranchRef: { name: 'main' } }]]).dir}${delimiter}${process.env.PATH}` } }));
+    assert.equal(named.remote, 'origin');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('prepare finds its repo through an scp-form remote', () => {
+  const { base, repo, git } = fixtureRepo();
+  const gh = fakeGh([['repo view', { nameWithOwner: 'example/app', defaultBranchRef: { name: 'main' } }]]);
+  const env = { ...process.env, PATH: `${gh.dir}${delimiter}${process.env.PATH}` };
+  const run = (...args) => JSON.parse(execFileSync('node', [SYNC, ...args], { cwd: repo, encoding: 'utf8', env }));
+  try {
+    // No user part, since the public mirror's scrub reads one as an email address.
+    git(repo, 'config', `url.${join(base, 'origin.git')}.insteadOf`, 'github.com:example/app.git');
+    git(repo, 'remote', 'set-url', 'origin', 'github.com:example/app.git');
+    const { stateFile, commit } = run('prepare', '--repo', 'example/app');
+    assert.equal(commit, git(repo, 'rev-parse', 'origin/main').trim());
+    run('cleanup', '--state', stateFile);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+    rmSync(gh.dir, { recursive: true, force: true });
+  }
+});
+
+test('prepare builds the repo gh names when origin is a fork, and check-tip follows that remote', () => {
+  const { base, repo, git } = fixtureRepo();
+  const gh = fakeGh([['repo view', { nameWithOwner: 'example/app', defaultBranchRef: { name: 'main' } }]]);
+  const env = { ...process.env, PATH: `${gh.dir}${delimiter}${process.env.PATH}` };
+  const run = (...args) => JSON.parse(execFileSync('node', [SYNC, ...args], { cwd: repo, encoding: 'utf8', env }));
+  try {
+    const fork = join(base, 'fork.git');
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork);
+    git(repo, 'remote', 'rename', 'origin', 'upstream');
+    git(repo, 'config', `url.${fork}.insteadOf`, 'https://github.com/someone/app.git');
+    git(repo, 'remote', 'add', 'origin', 'https://github.com/someone/app.git');
+    git(repo, 'push', '-q', 'origin', 'HEAD:main');
+    const forkTip = git(repo, 'rev-parse', 'HEAD').trim();
+
+    const pusher = join(base, 'pusher');
+    git(base, 'clone', '-q', join(base, 'origin.git'), pusher);
+    git(pusher, 'config', 'user.email', 'test@example.com');
+    git(pusher, 'config', 'user.name', 'Test');
+    const push = (name) => {
+      writeFileSync(join(pusher, name), 'x');
+      git(pusher, 'add', '.');
+      git(pusher, 'commit', '-q', '-m', name);
+      git(pusher, 'push', '-q', 'origin', 'HEAD:main');
+      return git(pusher, 'rev-parse', 'HEAD').trim();
+    };
+    const tip = push('newer');
+
+    const state = run('prepare', '--workdir', join(base, 'work'));
+    assert.equal(state.remote, 'upstream');
+    assert.equal(state.commit, tip);
+    assert.notEqual(state.commit, forkTip);
+    assert.deepEqual(run('check-tip', '--state', state.stateFile), { commit: tip, tipMoved: false });
+    push('newest');
+    assert.equal(run('check-tip', '--state', state.stateFile).tipMoved, true);
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
