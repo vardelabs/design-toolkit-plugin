@@ -1,8 +1,8 @@
 # Design Toolkit
 
-**Version:** 0.10.2 | **Status:** Beta | **Author:** Varde Labs
+**Version:** 0.11.0 | **Status:** Beta | **Author:** Varde Labs
 
-Design review tooling for UI work: `design-spec` makes the review material, `ui-inspect` measures the screen first, `design-audit` lists what is generic or broken on an existing screen, and `clean-copy` cuts interface copy that should not exist.
+Design review tooling for UI work: `design-spec` makes the review material, `ui-inspect` measures the screen first, `design-audit` lists what is generic or broken on an existing screen, `clean-copy` cuts interface copy that should not exist, and `design-system-sync` republishes a repo's Design System library after a merge.
 
 ## Install
 
@@ -16,6 +16,11 @@ See the repository README.
 | `ui-inspect` | Before capturing review material, after changing an app screen, "is anything clipped" | Measures the rendered screen at the design-spec viewports in light and dark: overflow, clipped and covered text, contrast, font fallback, broken images, small text, type sizes and faces, line length, sideways rows, and icons off the middle of their text, with per-repo exceptions in `.design-toolkit.json`. Each FAIL and WARN carries a fix. |
 | `design-audit` | Before a redesign, a page that "looks AI-made", "audit this page" | Lints the source for generated-page tells (app or site rule set), measures the page with ui-inspect, captures it in light and dark, and orders every finding by the fix order with the shot that shows it. Presents through a design-spec card. Reports, never edits. |
 | `clean-copy` | Writing or reviewing any user-facing string, "clean up the copy" | Cuts interface copy that should not exist (restated labels, pre-empted worries, scar tissue from fixed bugs) by a four-rung ladder, keeps legal, accessibility and safety text, and sets the shape of an error message. Reports each string as `file:line` with a rewrite or `cut`. |
+| `design-system-sync` | The merge hook's notice, "sync the design system", "the library is stale" | Rebuilds a repo's private Design System library from its default branch in a temporary detached worktree, republishes it with the Artifact tool, and reports the commit and the cards that changed. The repo declares the artifact, source paths, and commands in `.design-toolkit.json`. |
+
+## Hooks
+
+`design-system-sync-on-merge` runs after `gh pr merge`. When the PR merged into the default branch and touched the repo's declared source paths, it tells the session to run `design-system-sync` in the same turn. It stays silent otherwise, never publishes, and always exits 0. A repo with no `design-system-sync` block in `.design-toolkit.json` never hears from it. A merge outside a Claude session fires no hook; run the skill by hand, or let the next merge's run catch up.
 
 ## Requirements
 

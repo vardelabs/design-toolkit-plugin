@@ -1,11 +1,12 @@
 # Design Toolkit
 
-A Claude Code plugin for reviewing UI work the way a product design team does. It has four skills:
+A Claude Code plugin for reviewing UI work the way a product design team does. It has five skills:
 
 - **design-spec** makes the review material for a UI change. A small change gets a quick card: one image with every state, each titled and captioned. A bigger build gets a full sheet: a private claude.ai Artifact that is republished to the same URL each round.
 - **ui-inspect** measures a screen in a headless browser before you capture it. It finds overflow, clipped or covered text, low contrast, fallback fonts, broken images, and type that is too small.
 - **design-audit** lists what looks generic or broken on an existing screen, in the order to fix it. It reports and never edits.
 - **clean-copy** cuts interface copy that should not exist, and sets the shape of an error message.
+- **design-system-sync** rebuilds a repo's Design System library from its default branch and republishes it. A hook asks for it after a merge touches the source paths the repo declares.
 
 ## Install
 

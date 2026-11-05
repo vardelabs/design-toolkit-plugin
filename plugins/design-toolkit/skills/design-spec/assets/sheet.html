@@ -404,9 +404,10 @@
   }
 
   // The after colour decides first: a change that breaks a passing colour must never read as a pass.
-  function verdict(before, after, target) {
+  function verdict(before, after, target, isNew) {
     const passedBefore = before !== null && before >= target;
     if (after === null) return el('span', 'pill fail', 'After colour could not be measured');
+    if (isNew) return el('span', `pill ${after < target ? 'fail' : 'pass'}`, after < target ? 'New colour, below target' : 'New colour, passes');
     if (after < target) return el('span', 'pill fail', passedBefore ? 'Now below target' : 'Still below target');
     return passedBefore ? el('span', 'pill same', 'Already passed; changed to match') : el('span', 'pill pass', 'Now passes');
   }
@@ -430,12 +431,12 @@
     node.append(head);
     data.colors.forEach((c) => {
       const target = c.target || 4.5;
-      const before = swatch(c.before, target);
+      const before = c.before ? swatch(c.before, target) : { cell: el('div', 'none', 'New colour: no before'), ratio: null };
       const after = swatch(c.after, target);
       const name = el('td');
       name.append(el('code', '', c.token), el('div', 'where', c.where));
       const row = el('tr');
-      row.append(name, el('td', '', `${c.theme}, on ${c.surface}`), el('td', '', `${target}:1`), td(before.cell), td(after.cell), td(verdict(before.ratio, after.ratio, target)));
+      row.append(name, el('td', '', `${c.theme}, on ${c.surface}`), el('td', '', `${target}:1`), td(before.cell), td(after.cell), td(verdict(before.ratio, after.ratio, target, !c.before)));
       node.append(row);
     });
     const scroll = el('div', 'table-scroll');
@@ -631,8 +632,8 @@
     if ((data.states || []).length) sheet.append(statesSection());
     if ((data.checks || []).length) sheet.append(checksSection());
     if ((data.removed || []).length) sheet.append(removedSection());
-    if (data.parity.length) sheet.append(paritySection());
-    if (data.options.length) sheet.append(optionsSection());
+    if ((data.parity || []).length) sheet.append(paritySection());
+    if ((data.options || []).length) sheet.append(optionsSection());
     if ((data.interactions || []).length) sheet.append(interactionsSection());
     if ((data.notInScope || []).length) sheet.append(section('Not in This PR', list(data.notInScope)));
     sheet.append(section('Open Questions', list(data.questions, true)));
