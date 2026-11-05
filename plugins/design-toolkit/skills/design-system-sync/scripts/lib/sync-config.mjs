@@ -4,8 +4,9 @@ const KEY = 'design-system-sync';
 const ARTIFACT_URL = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/;
 const PYTHON_VERSION = /^\d+\.\d+$/;
 
+// GitHub's file list has no `./` form, so a `.` segment could never match a changed file.
 const isRelativeInside = (path) =>
-  typeof path === 'string' && path.length > 0 && !path.startsWith('/') && !path.split('/').includes('..');
+  typeof path === 'string' && path.replace(/\/$/, '').split('/').every((part) => part && part !== '.' && part !== '..');
 const isCommand = (argv) => Array.isArray(argv) && argv.length > 0 && argv.every((arg) => typeof arg === 'string' && arg);
 
 const CHECKS = [
@@ -16,6 +17,8 @@ const CHECKS = [
   ['out', isRelativeInside, 'a repo-relative path'],
   ['python', (v) => v === undefined || (typeof v === 'string' && PYTHON_VERSION.test(v)), 'a version such as "3.10"'],
   ['knownFails', (v) => v === undefined || (Array.isArray(v) && v.every((s) => typeof s === 'string')), 'a list of strings'],
+  // An empty prefix would match every card and quietly turn off card removal.
+  ['keepCards', (v) => v === undefined || (Array.isArray(v) && v.every((s) => typeof s === 'string' && s)), 'a list of card name prefixes'],
 ];
 
 // JSON.parse quotes the text it failed on, and this text comes from a PR, so its message must not travel.

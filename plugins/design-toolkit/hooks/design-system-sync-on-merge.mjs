@@ -150,9 +150,11 @@ function failureReason(err) {
 // Names only the repo and PR number: file names and config text come from the PR and must not reach the session as prose.
 function syncNotice(synced) {
   const prs = synced.map(({ repo, number }) => `${repo}#${number}`).join(', ');
+  const repos = [...new Set(synced.map(({ repo }) => repo))].join(', ');
   return `design-toolkit: ${prs} merged and touched the repo's declared design source paths, so its Design System `
     + 'library is now behind the default branch. In this turn, run the design-toolkit:design-system-sync skill, '
-    + 'which rebuilds from the default branch and republishes. Report its result.';
+    + `which rebuilds from the default branch and republishes. Run it from a checkout of ${repos}, and pass that repo `
+    + 'to its prepare step as --repo. Report its result.';
 }
 
 const failureNotice = (reason) => 'design-toolkit: could not check whether this merge touched design source paths '
