@@ -55,7 +55,7 @@ node <skill>/scripts/capture.mjs --url http://localhost:5173/composer --out <scr
 |---|---|---|
 | `--viewport` | `desktop` | `desktop` (1280x800), `narrow` (400x800), or `WIDTHxHEIGHT`. Repeat for several. |
 | `--theme` | `light` and `dark` | Repeat to pick. Each theme is a separate shot. |
-| `--selector` | whole viewport | Crop to this element plus `--margin` (default 24px). Repeat it to crop to the union of several elements, for example a dialog and a menu that opens past its edge. |
+| `--selector` | whole viewport | Crop to this element plus `--margin` (default 96px). Repeat it to crop to the union of several elements, for example a dialog and a menu that opens past its edge. |
 | `--theme-attr` | none | Also set this attribute on `<html>` to `light` or `dark`, for apps whose theme attribute overrides `prefers-color-scheme`. |
 | `--cookies` | none | Path to a JSON file holding an array of CDP cookie objects, for a page behind a sign-in. |
 | `--wait-for` | none | A selector that must exist before the shot. |
@@ -69,13 +69,14 @@ The capture rules:
 
 - **Fixed viewports.** Before and after use the same viewport and the same crop.
 - **Both themes** for every state. Check that the dark shot is really dark. If it is not, the app sets its theme another way: use `--theme-attr`.
-- **2x, cropped to the component with margin.** Never upscale a shot.
+- **2x, with room around the content.** A shot keeps enough of the surrounding screen to show where the content sits: the controls beside it and the section it belongs to. It does not need the full window. The default `--margin` gives a `--selector` crop that room; raise it if the neighbours still do not show. Never upscale a shot.
+- **Element shots go through `capture.mjs`.** A browser tool's own element screenshot, such as Playwright's `locator.screenshot`, crops flush to the element with no margin. Do not use one for review material.
 - **Before comes from `main`.** Add a worktree of `origin/main`, run its dev server on another port, and capture it with the same arguments and `--name <screen>-before`.
 - **Animations are frozen** and reduced motion is on, so a shot never catches a transition halfway.
 - **No focus ring a person never sees.** A state that a script opened (a dialog, a menu) keeps focus where the script put it, and the shot draws its ring. Pass `--blur`, unless the state you show is the focus state itself.
 - **Never send a stale frame.** If you must use the Claude desktop browser pane (for example, no cookies for a signed-in page), make the pane visible and take a fresh screenshot after it repaints. A hidden pane does not repaint, so a shot taken while it is hidden can show an old or blurred frame.
 - **Sandbox blocked.** On a Linux host that blocks unprivileged user namespaces (Ubuntu 23.10 and later), Chromium has no usable sandbox. `capture.mjs` then retries once with `--no-sandbox` and prints a note. Capture only pages you trust: your own dev server, `main`, and the templates.
-- **Zoom crops for each changed element.** Crop the element itself with `--selector` and a small `--margin` (8 to 14), before and after, both themes. These show the change large; the whole-screen pairs are context.
+- **Zoom crops for each changed element.** Crop the element itself with `--selector` and a small `--margin` (8 to 14), before and after, both themes. These show the change large. A zoom is the one shot that may sit tight, because the whole-screen pair of the same element carries the context, so never send a zoom without that pair.
 - **`--selector` takes the first match.** A class that a parent row also carries matches the parent. Narrow it with `:has()` or a more specific path.
 - **An element inside its own scrolling pane, below the fold,** can crop to the wrong region. Use a taller `--viewport`, such as `1280x1600`.
 - **No browser at all.** If `capture.mjs` finds no browser, not even a Playwright Chromium, and the session has no browser pane, say so to the reviewer and stop. Do not send loose screenshots from another tool in place of the card or sheet.
@@ -126,6 +127,8 @@ The quick card is one image. Every state goes in it, each with a title and a loo
    ```bash
    node <skill>/scripts/capture.mjs --url <scratch>/card.html --out <scratch> --name card --selector .card --margin 0 --theme light --viewport 1300x900
    ```
+
+   `--margin 0` belongs here because this crop is the composed card, not a product screen.
 
 4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). Pass no `display: "render"` to `SendUserFile`, since that opens a side pane the reviewer did not ask for. Never open the card image in a browser: a browser is for published sheets only. It is 2x: 2400 pixels wide.
 

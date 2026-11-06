@@ -23,7 +23,7 @@ function readOptions(argv) {
       viewport: { type: 'string', multiple: true, default: ['desktop'] },
       theme: { type: 'string', multiple: true, default: ['light', 'dark'] },
       selector: { type: 'string', multiple: true, default: [] },
-      margin: { type: 'string', default: '24' },
+      margin: { type: 'string', default: '96' },
       'theme-attr': { type: 'string' },
       cookies: { type: 'string' },
       'wait-for': { type: 'string' },
