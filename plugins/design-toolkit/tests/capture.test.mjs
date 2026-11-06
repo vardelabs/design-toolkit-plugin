@@ -50,6 +50,12 @@ test('clips to the selector plus margin at twice the CSS size', { skip: NO_CHROM
   assert.equal(shot.file, join(dir, 'shot-800x600-light.png'));
 });
 
+test('with no --margin, a selector crop keeps 96px of the screen around the element', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const [shot] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--viewport', '800x600', '--theme', 'light']);
+  assert.deepEqual(pngSize(shot.file), { width: (200 + 192) * 2, height: (120 + 192) * 2 });
+});
+
 test('light and dark come from prefers-color-scheme', { skip: NO_CHROME }, () => {
   const dir = workdir();
   const [light, dark] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--viewport', '800x600']);
