@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbour Street Bakery</title>
+<style>
+  :root { --ink: #1f2421; --paper: #e9ece8; --accent: #0b5d4b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.55 Georgia, serif; }
+  header, section, footer { padding: 72px 6vw; }
+  header { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+  h1 { font-size: clamp(40px, 6vw, 80px); line-height: 1.02; margin: 0 0 24px; }
+  h2 { font-size: 32px; line-height: 1.15; margin: 0 0 16px; }
+  p { max-width: 60ch; margin: 0 0 16px; }
+  img { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: cover; }
+  a.cta { display: inline-block; background: var(--accent); color: #fff; padding: 14px 24px; text-decoration: none; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+  .band img { aspect-ratio: 16 / 5; }
+  footer { background: var(--ink); color: var(--paper); }
+  footer a { color: var(--paper); }
+  .rise { animation: rise 700ms ease-out both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 900px) { header, .pair { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+</style></head><body>
+<header>
+  <div>
+    <h1 class="rise">Harbour Street bread</h1>
+    <p class="rise">We bake rye, sourdough and seeded loaves through the night, and the shop opens when the first trays cool.</p>
+    <a class="cta rise" href="#visit">Find the shop</a>
+  </div>
+  <img class="rise" src="oven.png" alt="The brick oven at night">
+</header>
+<section class="pair">
+  <img class="rise" src="oven.png" alt="Loaves cooling on the rack">
+  <div>
+    <h2 class="rise">Three loaves, one oven</h2>
+    <p class="rise">The oven is the brick oven the bakery opened with in 1962. It holds sixty loaves, so each morning brings three kinds and no more.</p>
+    <p class="rise">Rye on Monday, sourdough every day, seeded bread on the weekend.</p>
+  </div>
+</section>
+<section class="band"><img class="rise" src="oven.png" alt="Harbour Street at dawn"></section>
+<section id="visit" class="pair">
+  <div>
+    <h2 class="rise">Visit</h2>
+    <p class="rise">Monday to Friday, 7 in the morning until the bread runs out. Saturday and Sunday, 8 until noon.</p>
+    <p class="rise">14 Harbour Street, next to the ferry steps.</p>
+  </div>
+  <img class="rise" src="oven.png" alt="The shop front">
+</section>
+<footer><p>Harbour Street Bakery. Call 555 0142 or write to <a href="mailto:hello@example.com">hello@example.com</a>.</p></footer>
+</body></html>

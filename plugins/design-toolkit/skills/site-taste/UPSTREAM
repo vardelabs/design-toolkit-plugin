@@ -1,0 +1,7 @@
+repo: https://github.com/Leonxlnx/taste-skill
+sha: f624f37a8c650b9cc550253104925efe4c8de246
+date: 2026-11-07
+files: skills/taste-skill/SKILL.md, references/, library/, scripts/assets.mjs, scripts/draw.mjs, scripts/inspect.mjs, scripts/lint.mjs, scripts/lib/, assets/base.css, assets/base.js -> same paths (byte-identical), LICENSE -> LICENSE
+changed: SKILL.md frontmatter only: name design-taste-frontend -> site-taste, and a new description that routes app screens to design-spec and ui-inspect and CSS technique to css-toolkit:good-css
+left out: skills/taste-skill/README.md, skills/taste-skill/evals/, the style-preset skills, taste-skill-v1, taste-skill-v2-experimental, brandkit
+scripts/lib/cdp.mjs is the same file as skills/design-spec/scripts/lib/cdp.mjs at this pin; tests/site-taste.test.mjs fails when the two copies differ

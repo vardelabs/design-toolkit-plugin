@@ -1,0 +1,5 @@
+repo: https://github.com/Leonxlnx/taste-skill
+sha: f624f37a8c650b9cc550253104925efe4c8de246
+date: 2026-11-07
+files: skills/taste-skill/references/type.md, colour.md, layout.md and skills/stitch-skill/SKILL.md -> laws.md (adapted), LICENSE -> LICENSE
+changed: kept only the laws a DESIGN.md can state as a threshold, mapped each to the ui-inspect rule that measures it, and turned stitch-skill's bans into tells that need the repo's own evidence before they become rules; stitch-skill's invented palette, fonts, and motion defaults are dropped, because the doc describes the repo as it is

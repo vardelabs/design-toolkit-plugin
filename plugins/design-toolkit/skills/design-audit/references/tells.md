@@ -1,6 +1,6 @@
 # Tells the Linter Finds
 
-Adapted from taste-skill's dated registry of generated-page tells and its redesign audit (MIT, see `../scripts/lib/LICENSE` and `UPSTREAM`).
+Adapted from taste-skill's dated registry of generated-page tells and its redesign audit (MIT, see `../scripts/lib/LICENSE` and `UPSTREAM`). The rules from `side-tab` down are ported from Impeccable's detector (Apache-2.0, see `impeccable/`).
 
 A tell is a device that makes a page read as generated. Most began as good ideas on good sites. They became tells by being produced by default, everywhere, without a reason. So a finding names the pattern and a procedure, never a replacement font, colour, or component: every published "use this instead" list has become the next wave of tells.
 
@@ -41,6 +41,21 @@ Mark a line kept on purpose with a `design-audit-ignore` comment. In `.js`, `.js
 | `scale-zero` | WARN | app, site | motion | Entering from scale(0). Start near 0.95 with opacity 0. |
 | `h-screen` | WARN | app, site | composition | 100vh jumps on mobile. Use 100svh or 100dvh. |
 | `bounce` | WARN | app, site | motion | Looping attention animation. |
+| `side-tab` | WARN | app, site | detail | A thick accent stripe on one side of a card. Remove it, or mark the state some other way. |
+| `border-accent-on-rounded` | WARN | app, site | detail | A thick accent band on a rounded card; the band fights the corners. Drop the band or the radius. |
+| `bounce-easing` | WARN | app, site | motion | Bounce or elastic motion, or an easing curve that overshoots. Real objects slow down smoothly; use an ease-out. |
+| `dark-glow` | WARN | app | detail | A coloured glow around an element. Use contrast or a surface step for emphasis. |
+| `radial-halo` | WARN | app | colour | A coloured radial wash fading to transparent behind content. Use a flat surface. |
+| `marquee` | WARN | app, site | motion | Content that scrolls by itself. Show it still, or let the user scroll it. |
+| `blinking-cursor` | WARN | app, site | motion | A blinking cursor that imitates typing where no input exists. Show the text. |
+| `extreme-negative-tracking` | WARN | app, site | type | Letter-spacing tighter than -0.09em; the letters touch. Tighten display type by eye, not past their shapes. |
+| `justified-text` | WARN | app, site | type | Justified text. Without hyphenation it opens rivers of space; set it flush left. |
+| `repeating-stripes-gradient` | WARN | app | detail | Stripes from a repeating gradient as surface decoration. Leave the surface plain. |
+| `organic-clip-path` | WARN | app, site | imagery | A clip-path that draws a blob, torn edge, or silhouette. Use a real image or a plain shape. |
+| `hard-offset-shadow` | WARN | app | detail | A hard offset shadow with no blur. Keep it only if the design means a neobrutalist look. |
+| `theater-slop-phrase` | WARN | app, site | idea | Calling something "theater". Say plainly what it does or does not do. |
+
+Impeccable checks these in a rendered page; here they read one source line, so each is a WARN to confirm in the shots. `dark-glow`, `radial-halo`, `repeating-stripes-gradient`, and `hard-offset-shadow` run in app mode only, because site mode already bans every shadow and gradient. `radial-halo` also covers Impeccable's `radial-spotlight-glow`: a source line cannot tell an accent wash from any other coloured one. The `theater-slop-phrase` rule reads copy as `copy` does: strings and JSX text in script, and never a comment.
 
 ## What a Render Shows Instead
 

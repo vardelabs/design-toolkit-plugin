@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -48,6 +48,15 @@ test('clips to the selector plus margin at twice the CSS size', { skip: NO_CHROM
   const [shot] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--margin', '10', '--viewport', '800x600', '--theme', 'light']);
   assert.deepEqual(pngSize(shot.file), { width: (200 + 20) * 2, height: (120 + 20) * 2 });
   assert.equal(shot.file, join(dir, 'shot-800x600-light.png'));
+});
+
+test('--card refuses a crop over the height limit and writes no file', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  writeFileSync(join(dir, 'tall.html'), '<!doctype html><body style="margin:0"><div class="card" style="width:200px;height:401px"></div></body>');
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', join(dir, 'tall.html'), '--out', dir, '--name', 'card', '--selector', '.card', '--margin', '0', '--card', '--viewport', '800x600', '--theme', 'light'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /Make the full sheet instead/);
+  assert.equal(existsSync(join(dir, 'card-800x600-light.png')), false);
 });
 
 test('with no --margin, a selector crop keeps 96px of the screen around the element', { skip: NO_CHROME }, () => {

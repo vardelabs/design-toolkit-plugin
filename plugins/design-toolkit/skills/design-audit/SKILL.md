@@ -31,6 +31,10 @@ The script:
 
 Without `--out`, it writes to a fresh temp folder and prints the path, so an audit run from a repo never writes into it. It takes the same page options as ui-inspect: `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, `--blur`, and `--ignore`. The linter also runs alone: `node <skill>/scripts/lint.mjs <dir> [--mode site] [--json]`.
 
+### Edge Cases and Native Apps
+
+The shots show the page with the data it had. Before you order the findings, check the screen against `references/impeccable/harden.md`: long and empty text, errors, slow and failed requests, translations and right-to-left text, and large numbers. List each gap the screen does not handle as a finding in the `detail` area. For a native iOS or Android app, read `references/impeccable/ios.md` or `android.md` instead of the web rules; the linter and ui-inspect do not apply there.
+
 ## Step 2: Judge the Shots
 
 The script measures; it cannot see. Open every shot in `<out>/shots/` and run the passes in design-spec's `references/critique.md`, and the render-only tells at the end of `references/tells.md`. Judge the images, never the code.
@@ -54,7 +58,7 @@ Then present it through design-spec. Fill the card with design-spec's `scripts/f
 
 ```bash
 node <design-spec>/scripts/fill.mjs <design-spec>/assets/card.html <scratch>/audit/card.json <scratch>/audit/card.html
-node <design-spec>/scripts/capture.mjs --url <scratch>/audit/card.html --out <scratch>/audit --name card --selector .card --margin 0 --theme light --viewport 1300x900
+node <design-spec>/scripts/capture.mjs --url <scratch>/audit/card.html --out <scratch>/audit --name card --selector .card --margin 0 --card --theme light --viewport 1300x900
 ```
 
 For a long audit, more than about fifteen findings or several screens, use the full sheet instead: put the findings in its `findings` field, the shots in `states`, and publish it as design-spec Step 4 describes.
@@ -75,3 +79,6 @@ For a long audit, more than about fifteen findings or several screens, use the f
 | `scripts/lib/lint-rules.mjs` | The rules, each with its modes and fix-order area. |
 | `scripts/lib/UPSTREAM` | The taste-skill commit these are adapted from, and what changed. |
 | `references/tells.md` | Every rule, by mode and area, and the tells only a render shows. |
+| `references/impeccable/harden.md` | Edge-case checklist: inputs, errors, i18n, text overflow, network. From Impeccable. |
+| `references/impeccable/ios.md`, `android.md` | Platform notes for native app work. From Impeccable, distilled from ehmo's platform-design-skills. |
+| `references/impeccable/UPSTREAM` | The Impeccable commit, which detector rules were ported, and which were skipped and why. |
