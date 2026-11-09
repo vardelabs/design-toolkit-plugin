@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { cardTooTallMessage } from './lib/card-limit.mjs';
 import { launchBrowser, useBundledChromiumIfNeeded } from './lib/launch-browser.mjs';
 import { parseTheme, parseViewport, preparePage, toUrl } from './lib/page.mjs';
 
@@ -11,7 +12,7 @@ const SCALE = 2;
 const USAGE = `usage: node capture.mjs --url <url|file> [--out dir] [--name base]
   [--viewport desktop|narrow|WIDTHxHEIGHT]... [--theme light|dark]...
   [--selector css]... [--margin px] [--theme-attr name] [--cookies file.json]
-  [--wait-for css] [--settle ms] [--blur] [--full-page]`;
+  [--wait-for css] [--settle ms] [--blur] [--full-page] [--card]`;
 
 function readOptions(argv) {
   const { values } = parseArgs({
@@ -30,6 +31,7 @@ function readOptions(argv) {
       settle: { type: 'string', default: '300' },
       blur: { type: 'boolean', default: false },
       'full-page': { type: 'boolean', default: false },
+      card: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
   });
@@ -42,6 +44,7 @@ function readOptions(argv) {
     themes: values.theme.map(parseTheme),
     selectors: values.selector,
     fullPage: values['full-page'],
+    card: values.card,
     margin: Number(values.margin),
     themeAttr: values['theme-attr'],
     cookies: values.cookies ? JSON.parse(readFileSync(values.cookies, 'utf8')) : null,
@@ -79,11 +82,18 @@ async function fullPageClip(page) {
   return { x: 0, y: 0, ...size, scale: 1 };
 }
 
+function refuseTallCard(clip, viewport) {
+  const box = clip ?? viewport;
+  const tooTall = cardTooTallMessage(Math.round(box.width * SCALE), Math.round(box.height * SCALE));
+  if (tooTall) throw new Error(tooTall);
+}
+
 async function shoot(browser, opts, viewport, theme) {
   const page = await browser.newPage({ width: viewport.width, height: viewport.height, dsf: SCALE });
   try {
     await preparePage(page, opts, theme);
     const clip = opts.selectors.length ? await clipFor(page, opts.selectors, opts.margin) : opts.fullPage ? await fullPageClip(page) : null;
+    if (opts.card) refuseTallCard(clip, viewport);
     const params = { format: 'png', captureBeyondViewport: !!clip, ...(clip && { clip }) };
     const { data } = await page.send('Page.captureScreenshot', params, 45000);
     const file = join(opts.out, `${opts.name}-${viewport.name}-${theme}.png`);

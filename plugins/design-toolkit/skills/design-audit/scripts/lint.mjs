@@ -53,13 +53,14 @@ function exempt(rule, ctx) {
     return rule.id === 'hairline' && /sr-only|visually-hidden|clip(-path)?\s*:|outline/i.test(ctx.line + ctx.selector);
   }
   if (rule.id === 'shadow') return ctx.inUi;
-  if (rule.id === 'copy' || rule.id === 'cta-copy' || rule.id === 'emoji' || rule.id === 'oops-copy') return COMMENT_LINE.test(ctx.line);
+  if (COPY_RULES.has(rule.id) || rule.id === 'cta-copy' || rule.id === 'emoji' || rule.id === 'oops-copy') return COMMENT_LINE.test(ctx.line);
   return false;
 }
 
 // In script, copy is only what reaches the screen: string literals and JSX text, never an identifier such
 // as robust or leverage().
 const SCRIPT = new Set(['.js', '.jsx', '.ts', '.tsx']);
+const COPY_RULES = new Set(['copy', 'theater-slop-phrase']);
 const shownText = (line) => [...line.matchAll(/(["'`])((?:\\.|(?!\1).)*)\1|>([^<>{}]+)</g)].map((m) => m[2] ?? m[3]).join(' ');
 
 // Paths read from the folder that was scanned (src/app.css), whatever directory the audit ran from.
@@ -81,7 +82,7 @@ function scanFile({ path, root, label }, rules) {
     const ctx = { line, selector, inUi, codeLine };
     for (const rule of rules) {
       if (exempt(rule, ctx)) continue;
-      const m = (script && rule.id === 'copy' ? shownText(line) : line).match(rule.re);
+      const m = (script && COPY_RULES.has(rule.id) ? shownText(line) : line).match(rule.re);
       if (m) findings.push({ level: rule.level, id: rule.id, area: rule.area, file, line: i + 1, match: m[0].trim().slice(0, 70), message: rule.message });
     }
   });

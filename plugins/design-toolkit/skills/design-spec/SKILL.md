@@ -18,7 +18,7 @@ Make the state inventory (Step 1) first, then pick:
 | Format | Use when | Delivery |
 |---|---|---|
 | **Quick card** | The reviewer can reach every state in the inventory in the dev preview. | One PNG at 2x, inline in chat, with every state in it. |
-| **Full sheet** | The inventory holds states the reviewer cannot reach in the dev preview: error paths, mocked data, large counts, long text, narrow windows. | A private claude.ai Artifact, republished to the same URL each round. |
+| **Full sheet** | The inventory holds states the reviewer cannot reach in the dev preview: error paths, mocked data, large counts, long text, narrow windows. Also every card that `capture.mjs --card` refuses as too tall. | A private claude.ai Artifact, republished to the same URL each round. |
 
 Even a one-screen tweak gets a quick card, not a bare screenshot.
 
@@ -125,10 +125,12 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 3. Render it:
 
    ```bash
-   node <skill>/scripts/capture.mjs --url <scratch>/card.html --out <scratch> --name card --selector .card --margin 0 --theme light --viewport 1300x900
+   node <skill>/scripts/capture.mjs --url <scratch>/card.html --out <scratch> --name card --selector .card --margin 0 --card --theme light --viewport 1300x900
    ```
 
    `--margin 0` belongs here because this crop is the composed card, not a product screen.
+
+   `--card` holds the card to a height a chat app can show inline: at most twice its width, and never over 3000 px. The 2400 px wide card stops at 3000 px. A taller card is refused, no file is written, and the material becomes the full sheet (Step 4). Never split a refused card into several images.
 
 4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). Pass no `display: "render"` to `SendUserFile`, since that opens a side pane the reviewer did not ask for. Never open the card image in a browser: a browser is for published sheets only. It is 2x: 2400 pixels wide.
 

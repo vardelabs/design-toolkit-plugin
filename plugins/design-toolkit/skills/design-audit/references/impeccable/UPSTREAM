@@ -1,0 +1,14 @@
+repo: https://github.com/pbakaus/impeccable
+sha: 687bc381bc9091bf252c0a05303640561014a425
+date: 2026-11-07
+license: Apache-2.0 (LICENSE in this folder); ios.md and android.md also derive from ehmo/platform-design-skills (MIT), see the plugin NOTICE.md
+files: skill/reference/harden.md -> harden.md (adapted), skill/reference/ios.md -> ios.md (verbatim), skill/reference/android.md -> android.md (verbatim), LICENSE -> LICENSE
+changed: harden.md's last line hands off to design-audit instead of an Impeccable command
+
+rules: the logic of 14 detector rules from crates/core and crates/foundation, rewritten as one-line source patterns in ../../scripts/lib/lint-rules.mjs
+ported: side-tab, border-accent-on-rounded, bounce-easing, dark-glow, radial-halo (also covers radial-spotlight-glow), marquee, blinking-cursor, extreme-negative-tracking, justified-text, repeating-stripes-gradient, organic-clip-path, hard-offset-shadow, theater-slop-phrase
+thresholds kept: side stripe 3px or more, band 2px or more on a rounded card, bounce names (bounce, elastic, wobble, jiggle, spring) and a cubic-bezier y1 or y2 outside -0.1 to 1.1, tracking under -0.09em (the display limit, since a source line has no font size), clip-path polygon with 10 or more vertices or a path() with curves, offset shadow of 4px or more with no blur, the closed list of words before "theater"
+skipped, already covered: gradient-text (gradient-text), ai-color-palette (purple, gradient), cream-palette (claude-palette), pulsing-dot (bounce), hero-eyebrow-chip and kicker-above-heading (eyebrow, micro-label), numbered-section-labels (numbering), marketing-buzzword (copy), overused-font (default-font, site mode by design), broken-image, low-contrast, line-length, tiny-text, undersized-ui-text, text-overflow, text-occlusion (ui-inspect broken-image, contrast, measure, small-text, overflow and clipped-text, covered-text), em-dash-overuse (dropped on purpose in the taste-skill adaptation)
+not ported, need a rendered page: nested-cards, monotonous-spacing, flat-type-hierarchy, buried-raster, icon-tile-stack, italic-serif-display, oversized-h1, script-error, content-hidden-at-rest, edge-flush-cards, first-viewport-column-overflow, gray-on-color, cramped-padding, body-text-viewport-edge, tight-leading, heading-rhythm, straggler, unbalanced-heading, all-caps-body, wide-tracking, repeated-container-text, clipped-overflow-container, gpt-thin-border-wide-shadow
+not ported, need the whole file: shape-assembled-illustration, aphoristic-cadence, skipped-heading, codex-grid-background
+not ported, need a DESIGN.md: design-system-font, design-system-color, design-system-radius, design-system-font-size
