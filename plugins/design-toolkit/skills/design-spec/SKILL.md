@@ -138,7 +138,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 
 1. Write the sheet data as `<scratch>/sheet.json`, beside `shots/`, and run `fill.mjs` with `assets/sheet.html` and a `--title` of two to four words. The template has no doctype, `html`, `head`, or `body`, because the Artifact tool adds its own; do not add them.
 2. The data's fields:
-   - `ref`, `status`, `round`, `title`, `summary`, `viewport`, `source`, `captured`. Write the `summary` and every `lookFor` line as Write for a Designer says.
+   - `ref`, `status`, `round`, `title`, `summary`, `viewport`, `source`. Write the `summary` and every `lookFor` line as Write for a Designer says. Leave out `captured`: the bake sets it from the shot files' times.
    - `beforeLabel` and `afterLabel`: the column names for before and after. Name the real commits or branches, such as `Before (main @ 1a2b3c4)`; a sheet made after merge must not say "this branch".
    - `changes`: what changed since the last round. Round 1 leaves it empty.
    - `colors`: one row per changed colour per theme: `token`, `where` (the places it is used), `theme`, `surface` (what it sits on), `target` (the ratio it must meet: 4.5 for text, 3 for large text and icons, or the target the repo sets), and `before` and `after` (leave `before` out for a colour on a new element), each with a `text` colour, an opaque `ground` colour, and an optional see-through `tint` laid over the ground. The sheet computes every ratio from these values. Never type a ratio, and never read one off a screenshot. Leave it empty when no colour changed.
@@ -156,17 +156,25 @@ The quick card is one image. Every state goes in it, each with a title and a loo
    - `findings`: a list of `{ level, area, text, fix, where }`, rendered as Findings, in the Order to Fix Them. design-audit fills it; a change review leaves it empty. The quick card takes the same field.
 
    Every list may be empty. Its section then does not render, so a sheet holds only what it has.
-3. Publish it with the Artifact tool (`icon`: `layout` on the first publish), with every shot under `files` (for example `{"shots/composer-after-desktop-light.png": "<scratch>/shots/composer-after-desktop-light.png"}`).
-4. Each later round, republish **the same file path** so the URL stays the same. Put the URL in the PR body the first time.
-5. Right after each publish, close the app's artifact pane: call `mcp__ccd_view__close_pane` with pane `artifact`. On the Claude desktop app a publish opens that pane by itself, even when no editor tool touched the `.html`. Skip this step when the open mode is `app-pane`, or where the session has no such tool or is not on screen.
-6. Right after each publish, run `<skill>/scripts/open-sheet.sh <artifact URL>`. It opens the sheet on the first publish only, the way the reviewer set. A republish to the same URL opens nothing, because the tab already open shows the new version on reload. The script remembers each URL it opened on this machine, so run it every round. It always prints the link, and the link always goes in the reply. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `auto`:
+3. Bake it, so it shows in every Claude app, the phone app included:
+
+   ```bash
+   node <skill>/scripts/bake-sheet.mjs <scratch>/sheet.html <scratch>/sheet-baked.html
+   ```
+
+   The bake renders the sheet headless and writes static HTML: plain `<img>` tags with each shot inline as a data URI, no lazy loading, and no script. The capture time comes from the newest shot file on disk, never from typed text. It fails when the sheet throws while it renders, or when any image source is relative or a script remains. When the baked page passes 12 MB it stops and asks for asset URLs: upload the shots with the Artifact tool (`asset: true`, `file_paths`), write a JSON map of each shot path to the `url` the result gives, and bake again with `--assets <map.json>`.
+4. Check the baked sheet at phone width before you publish it: `node <skill>/scripts/capture.mjs --url <scratch>/sheet-baked.html --out <scratch> --name sheet-check --viewport 390x844 --full-page --theme light`. Every shot must show in that image.
+5. Publish `<scratch>/sheet-baked.html` with the Artifact tool (`icon`: `layout` on the first publish), with no `files`.
+6. Each later round, bake again and republish **the same file path** so the URL stays the same. Put the URL in the PR body the first time.
+7. Right after each publish, close the app's artifact pane: call `mcp__ccd_view__close_pane` with pane `artifact`. On the Claude desktop app a publish opens that pane by itself, even when no editor tool touched the `.html`. Skip this step when the open mode is `app-pane`, or where the session has no such tool or is not on screen.
+8. Right after each publish, run `<skill>/scripts/open-sheet.sh <artifact URL>`. It opens the sheet on the first publish only, the way the reviewer set. A republish to the same URL opens nothing, because the tab already open shows the new version on reload. The script remembers each URL it opened on this machine, so run it every round. It always prints the link, and the link always goes in the reply. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `auto`:
 
    | Mode | Opens |
    |---|---|
    | `auto` (default) | `browser-background`. |
    | `browser-background` | The default browser, left behind the app in use (`open -g`). |
    | `browser-foreground` | The default browser, brought to the front. |
-   | `app-pane` | Nothing: the desktop app's artifact pane shows it, so step 5 leaves the pane open. |
+   | `app-pane` | Nothing: the desktop app's artifact pane shows it, so step 7 leaves the pane open. |
    | `none` | Nothing: the link in the reply is enough. |
 
    Off macOS, every mode only prints the link. Set the default for a machine in the session environment, for example `"env": {"DESIGN_SPEC_OPEN": "browser-foreground"}` in Claude Code's `settings.json`.
@@ -218,6 +226,8 @@ Fix what fails, re-render, and check again. Then send it.
 |---|---|
 | `scripts/capture.mjs` | Headless capture: fixed viewports, 2x, both themes, crop, broken-image and page-error report. |
 | `scripts/fill.mjs` | Fills a template's JSON block from a data file through the shell, so no editor tool writes the `.html`. |
+| `scripts/bake-sheet.mjs` | Renders a filled sheet headless into static HTML with every shot inline and no script, and fails a sheet that is not self-contained. |
+| `scripts/lib/sheet-check.mjs` | The self-contained check `bake-sheet.mjs` runs: no relative image, lazy load, or script. |
 | `scripts/open-sheet.sh` | Opens a published sheet once per URL by the reviewer's chosen mode, and always prints its link. |
 | `scripts/lib/page.mjs` | Viewports, themes, and page setup, shared with `ui-inspect` so both see the same page. |
 | `scripts/lib/launch-browser.mjs` | Picks the browser, retries once with `--no-sandbox` where a Linux host blocks the sandbox, and retries once with a fresh profile when Chrome hangs at start. |

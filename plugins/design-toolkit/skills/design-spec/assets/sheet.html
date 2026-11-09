@@ -1,7 +1,8 @@
 <title>Design Spec</title>
 <!--
-  Fill the JSON block below, put the shots it names under shots/, and publish this file as a
-  claude.ai Artifact with each shot in `files`. Republish the same file path each round so the URL stays.
+  Fill the JSON block below, put the shots it names under shots/, then bake it with scripts/bake-sheet.mjs
+  and publish the baked file as a claude.ai Artifact. The baked file carries every shot and runs no script.
+  Republish the same file path each round so the URL stays.
   It has no doctype, html, head, or body: the Artifact tool wraps the page in its own.
   Fill it with scripts/fill.mjs, never by writing this file with an editor tool: on the desktop app, writing
   an .html file opens it in the preview pane.
@@ -275,7 +276,6 @@
     link.onclick = () => openViewer(src, alt);
     const img = el('img');
     img.alt = alt;
-    img.loading = 'lazy';
     img.onload = () => { img.style.width = img.naturalWidth / (zoomed ? 1 : 2) + 'px'; };
     img.src = src;
     link.append(img);
