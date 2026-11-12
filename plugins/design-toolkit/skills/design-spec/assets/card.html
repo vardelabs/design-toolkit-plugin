@@ -27,6 +27,19 @@
       "after": { "light": "shots/composer-after-desktop-light.png", "dark": "shots/composer-after-desktop-dark.png" }
     }
   ],
+  "guides": [
+    {
+      "label": "Toolbar icons on the controls' middle",
+      "lookFor": "The eye and the menu dots sit on the blue line at the middle of the zoom control, in both themes.",
+      "guide": "Middle of the zoom control (.file-zoom)",
+      "rows": [
+        { "label": "Before (light)", "src": "shots/toolbar-before-guide-desktop-light.png" },
+        { "label": "After (light)", "src": "shots/toolbar-after-guide-desktop-light.png" },
+        { "label": "Before (dark)", "src": "shots/toolbar-before-guide-desktop-dark.png" },
+        { "label": "After (dark)", "src": "shots/toolbar-after-guide-desktop-dark.png" }
+      ]
+    }
+  ],
   "columns": 2,
   "states": [
     {
@@ -92,6 +105,13 @@
   .finding .level.FAIL { color: var(--broken); }
   .finding .area { color: var(--muted); font-size: 13px; }
   .finding .note { grid-column: 3; color: var(--muted); font-size: 13px; }
+  .legend { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .legend::before { content: ''; width: 24px; height: 2px; background: #00aaff; }
+  .guide-rows { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: #c9ccd2; border-radius: 8px; }
+  .guide-rows .theme { margin: 0; }
+  .guide-row { background: var(--surface); padding: 6px; border-radius: 4px; }
+  .screen + .guides, .guides + .guides { margin-top: 28px; }
+  .guides h2 { font-size: 15px; margin: 0 0 6px; }
   .states { display: grid; gap: 24px 20px; align-items: start; margin-top: 28px; }
   .screen + .states { margin-top: 36px; }
   .tile h2 { font-size: 15px; margin: 0 0 6px; }
@@ -122,7 +142,8 @@
     return node;
   }
 
-  // Shots are captured at 2x, so half the natural width shows them at true size and never upscales.
+  // Half the natural width shows a 2x shot at true size and never upscales. A 4x guide shot shows at twice
+  // its CSS size, which is what a guide shot is for.
   function shot(src, alt) {
     const figure = el('figure');
     const img = el('img');
@@ -156,6 +177,23 @@
       columns.forEach(([name, pair]) => grid.append(cell(pair, theme, `${screen.label}, ${name}`)));
     }
     block.append(grid);
+    return block;
+  }
+
+  // A fix judged against a guide line reads in one column, Before above After and light above dark, so the
+  // eye moves only down the line it measures against.
+  function guideBlock(guide) {
+    const block = el('section', 'guides');
+    block.append(el('h2', '', guide.label));
+    if (guide.lookFor) block.append(lookLine(guide.lookFor));
+    if (guide.guide) block.append(el('p', 'legend', `Blue line: ${guide.guide}`));
+    const rows = el('div', 'guide-rows');
+    guide.rows.forEach((row) => {
+      const item = el('div', 'guide-row');
+      item.append(el('p', 'theme', row.label), shot(row.src, `${guide.label}, ${row.label}`));
+      rows.append(item);
+    });
+    block.append(rows);
     return block;
   }
 
@@ -209,6 +247,7 @@
     const lines = Math.round(summary.offsetHeight / parseFloat(getComputedStyle(summary).lineHeight));
     if (lines > 3) summary.after(el('p', 'too-long', `This summary runs ${lines} lines; cut it to 3.`));
     (data.screens || []).forEach((screen) => card.append(screenBlock(screen)));
+    (data.guides || []).forEach((guide) => card.append(guideBlock(guide)));
     if ((data.states || []).length) card.append(statesGrid(data.states));
     if ((data.findings || []).length) card.append(findingsBlock(data.findings));
     const footer = el('footer');

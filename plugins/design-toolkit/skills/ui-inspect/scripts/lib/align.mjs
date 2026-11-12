@@ -2,12 +2,15 @@ import { inflateSync } from 'node:zlib';
 
 // Text and icons snap to the device pixel grid, so page geometry (boxes and font metrics) can disagree
 // with the ink by up to a pixel, in a way that changes with where the row lands. Geometry only pairs each
-// icon with a letter beside it; the gap is read from the ink in a screenshot of the pair.
+// icon with a letter beside it; the gap is read from the ink in a screenshot of the pair. An icon-only
+// control with no letter to pair is held to the middle of the controls beside it, whose boxes, snapped to
+// the device grid, are what the eye lines it up with.
 //
 // findPairs and locatePair run INSIDE the page (serialised through cdp.mjs), so each stays self-contained:
 // no imports, no closures over module scope.
 
 const PAIRS = '__designToolkitAlignPairs';
+const BADGE = 'data-design-toolkit-badge';
 
 // exceptions: [{ selector, centre }], where centre names the letter height an icon centres on instead.
 function findPairs({ ignore, exceptions, key }) {
@@ -22,7 +25,15 @@ function findPairs({ ignore, exceptions, key }) {
     return parts.join(' > ');
   };
   const shown = (el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-  const firstText = (el) => document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() ? 1 : 3) }).nextNode();
+  // Words a person sees. An svg's title and a screen-reader label in a 1px box name a control but show
+  // nothing, so neither pairs with an icon, and a control that holds only those is icon-only.
+  const seenText = (t) => {
+    const holder = t.parentElement;
+    if (!t.textContent.trim() || holder.closest('svg') || !shown(holder)) return false;
+    const box = holder.getBoundingClientRect();
+    return box.width > 1 && box.height > 1;
+  };
+  const firstText = (el) => document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (seenText(t) ? 1 : 3) }).nextNode();
   const holdsOnly = (wrapper, child) => [...wrapper.childNodes].every((n) => n === child || (n.nodeType === 3 && !n.textContent.trim()) || n.nodeType === 8);
   // A wrapper that holds only the icon (a grid cell, a button) is the item the row lays out.
   const itemOf = (icon) => {
@@ -46,7 +57,7 @@ function findPairs({ ignore, exceptions, key }) {
   const textBeside = (row, item) => {
     for (const sibling of row.childNodes) {
       if (sibling === item) continue;
-      if (sibling.nodeType === 3 && sibling.textContent.trim()) return sibling;
+      if (sibling.nodeType === 3 && seenText(sibling)) return sibling;
       if (sibling.nodeType !== 1 || !shown(sibling)) continue;
       if (stacked(sibling)) return null;
       const text = firstText(sibling);
@@ -55,6 +66,27 @@ function findPairs({ ignore, exceptions, key }) {
     return null;
   };
   const centreFor = (icon) => exceptions.find((e) => icon.closest(e.selector))?.centre ?? 'cap-height';
+  const CONTROL = 'button, a[href], [role="button"], input:not([type="hidden"]), select';
+  const middleOf = (r) => r.top + r.height / 2;
+  const worded = (el) => el.matches('input, select') || !!firstText(el);
+  // The controls a row lays out beside an item, by their own box. Controls that hold words set the line
+  // when there are any; a row of icons alone is held to all of them.
+  const controlsBeside = (row, item) => {
+    const own = middleOf(item.getBoundingClientRect());
+    const controls = [...row.children].filter((sibling) => {
+      if (sibling === item || !shown(sibling) || /absolute|fixed/.test(getComputedStyle(sibling).position)) return false;
+      if (!sibling.matches(CONTROL) && !sibling.querySelector(CONTROL)) return false;
+      const box = sibling.getBoundingClientRect();
+      return box.height >= 8 && box.height <= 64 && Math.abs(middleOf(box) - own) <= 14;
+    });
+    const withWords = controls.filter(worded);
+    return withWords.length ? withWords : controls;
+  };
+  const iconOnly = (control) => {
+    if (worded(control)) return null;
+    const icons = [...control.querySelectorAll('svg, img')].filter((el) => !el.parentElement.closest('svg') && shown(el));
+    return icons.length === 1 ? icons[0] : null;
+  };
 
   const pairs = [];
   for (const icon of document.body.querySelectorAll('svg, img, canvas')) {
@@ -77,17 +109,32 @@ function findPairs({ ignore, exceptions, key }) {
     if (Math.abs(line.top + line.height / 2 - (box.top + box.height / 2)) > 14) continue;
     pairs.push({ icon, letter, row, report: { text: text.textContent.trim().slice(0, 40), at: pathOf(item), centre } });
   }
+  const paired = new Set(pairs.map((p) => p.icon));
+  for (const control of document.body.querySelectorAll(CONTROL)) {
+    if ((ignore && control.closest(ignore)) || !shown(control)) continue;
+    const icon = iconOnly(control);
+    if (!icon || paired.has(icon)) continue;
+    const item = itemOf(control);
+    const row = item.parentElement;
+    if (!row || !isRow(row) || outOfFlow(control, item)) continue;
+    const neighbours = controlsBeside(row, item);
+    if (!neighbours.length) continue;
+    const name = control.getAttribute('aria-label') || control.title || icon.getAttribute('alt') || 'icon';
+    pairs.push({ icon, neighbours, row, control, report: { text: name.trim().slice(0, 40), at: pathOf(item), centre: 'controls' } });
+  }
   window[key] = pairs;
   return pairs.map((p) => p.report);
 }
 
 // Brings a pair on screen and returns the clip that holds both, in document CSS px, and the column band of
-// each inside that clip, in image px. Returns null when another layer lies over the pair.
-function locatePair({ key, index }) {
-  const { icon, letter, row } = window[key][index];
+// each inside that clip, in image px. For an icon held to its neighbours' boxes, the second entry is
+// instead the middle row of those boxes in the clip, in image px. Returns null when another layer lies over
+// the pair.
+function locatePair({ key, index, badge }) {
+  const { icon, letter, neighbours, row, control } = window[key][index];
   icon.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
   const a = icon.getBoundingClientRect();
-  const l = letter.getBoundingClientRect();
+  const others = (neighbours ?? [letter]).map((el) => el.getBoundingClientRect());
   // A layer that paints over the row (a dialog's scrim, often blurred, or a pinned bar) puts its own pixels
   // in the screenshot, so the ink read there is not the icon's. A transparent layer, such as a stretched
   // link, changes no pixel, and neither does a closed dialog left in the page at zero opacity. Hit-testing
@@ -121,22 +168,40 @@ function locatePair({ key, index }) {
   };
   const hitStyle = document.head.appendChild(document.createElement('style'));
   hitStyle.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
-  const covered = [a, l].some(underLayer);
+  const covered = [a, ...others].some(underLayer);
   hitStyle.remove();
   if (covered) return null;
-  const left = Math.floor(Math.min(a.left, l.left));
-  const top = Math.floor(Math.min(a.top, l.top)) - 2;
-  const right = Math.ceil(Math.max(a.right, l.right));
-  const bottom = Math.ceil(Math.max(a.bottom, l.bottom)) + 2;
+  // A badge laid over an icon-only control (a dot, a count) paints in the icon's columns, where its ink
+  // would read as the icon's. It is hidden for the shot, then shown again.
+  if (control) {
+    const sheet = document.head.appendChild(document.createElement('style'));
+    sheet.id = badge;
+    sheet.textContent = `[${badge}="self"], [${badge}]::before, [${badge}]::after { visibility: hidden !important; }`;
+    for (const el of [control, ...control.querySelectorAll('*')]) {
+      if (icon.contains(el)) continue;
+      const placed = (pseudo) => /absolute|fixed/.test(getComputedStyle(el, pseudo).position);
+      if (!el.contains(icon) && placed(null)) el.setAttribute(badge, 'self');
+      else if (placed('::before') || placed('::after')) el.setAttribute(badge, 'pseudo');
+    }
+  }
+  const all = [a, ...others];
+  const left = Math.floor(Math.min(...all.map((r) => r.left)));
+  const top = Math.floor(Math.min(...all.map((r) => r.top))) - 2;
+  const right = Math.ceil(Math.max(...all.map((r) => r.right)));
+  const bottom = Math.ceil(Math.max(...all.map((r) => r.bottom))) + 2;
   const dpr = devicePixelRatio;
-  // A letter's box holds its side bearings, where a kerned neighbour's ink can reach.
-  const inset = l.width * 0.15;
   const band = (from, to) => [Math.round((from - left) * dpr), Math.round((to - left) * dpr)];
-  return {
-    clip: { x: left + scrollX, y: top + scrollY, width: right - left, height: bottom - top },
-    bands: [band(a.left, a.right), band(l.left + inset, l.right - inset)],
-    dpr,
-  };
+  const clip = { x: left + scrollX, y: top + scrollY, width: right - left, height: bottom - top };
+  if (neighbours) {
+    const middles = others.map((r) => (Math.round((r.top - top) * dpr) + Math.round((r.bottom - top) * dpr)) / 2).sort((p, q) => p - q);
+    const half = middles.length >> 1;
+    const middle = middles.length % 2 ? middles[half] : (middles[half - 1] + middles[half]) / 2;
+    return { clip, bands: [band(a.left, a.right)], middle, dpr };
+  }
+  // A letter's box holds its side bearings, where a kerned neighbour's ink can reach.
+  const [l] = others;
+  const inset = l.width * 0.15;
+  return { clip, bands: [band(a.left, a.right), band(l.left + inset, l.right - inset)], dpr };
 }
 
 // Chrome's screenshots are 8-bit RGB or RGBA, non-interlaced. They are decoded here, outside the page, so
@@ -204,15 +269,21 @@ function inkMiddle({ width, height, channels, pixels }, [x0, x1]) {
   return (inkRows[0] + inkRows[inkRows.length - 1] + 1) / 2;
 }
 
+function showBadges(badge) {
+  document.getElementById(badge)?.remove();
+  for (const el of document.querySelectorAll(`[${badge}]`)) el.removeAttribute(badge);
+}
+
 export async function alignment(page, { ignore, exceptions }) {
   const pairs = await page.eval(findPairs, { ignore, exceptions, key: PAIRS });
   const off = [];
   for (const [index, pair] of pairs.entries()) {
-    const located = await page.eval(locatePair, { key: PAIRS, index });
+    const located = await page.eval(locatePair, { key: PAIRS, index, badge: BADGE });
     if (!located) continue;
-    const { clip, bands, dpr } = located;
+    const { clip, bands, middle, dpr } = located;
     const image = decodePng(await page.screenshot({ format: 'png', clip }));
-    const [icon, letter] = bands.map((band) => inkMiddle(image, band));
+    await page.eval(showBadges, BADGE);
+    const [icon, letter = middle] = bands.map((band) => inkMiddle(image, band));
     if (icon === null || letter === null) continue;
     const gap = (icon - letter) / dpr;
     if (Math.abs(gap) >= 0.75) off.push({ ...pair, gap: Math.round(gap * 100) / 100 });
