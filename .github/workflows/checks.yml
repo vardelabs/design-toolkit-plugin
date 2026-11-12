@@ -15,7 +15,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       !(startsWith(github.head_ref, 'release/') &&
-        contains(fromJSON('["corvus-vardelabs", "desilvakai"]'), github.event.pull_request.user.login))
+        contains(fromJSON('["corvus-vardelabs", "desilvakai", "north-vardelabs"]'), github.event.pull_request.user.login))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
