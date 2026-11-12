@@ -229,6 +229,40 @@ const SHELL = ({ shift, layer }) => `<!doctype html><html><head><style>
     link: '<a class="stretched" href="#">Open the session</a>' }[layer] ?? ''}
 ${PLACE}</body></html>`;
 
+// A toolbar that sets its controls on its foot: a pill with a label, then two icon-only buttons. At 30, 32,
+// and 28px tall, the eye sits 1px high and the menu button 1px low against the pill's middle. The menu
+// button also holds an svg title and a screen-reader label, which show no words.
+const TOOLBAR = ({ eye, menu }) => `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .tools { display: flex; align-items: flex-end; gap: 8px; margin: 16px; }
+  .pill { height: 30px; padding: 0 12px; border: 1px solid #999; border-radius: 12px; background: #fff; font: inherit; }
+  .icon-btn { display: grid; place-items: center; width: 30px; padding: 0; border: 0; background: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style></head><body>
+  <div class="tools">
+    <button class="pill">Edit</button>
+    <button class="icon-btn eye" aria-label="Show AI view" style="height: ${eye}px"><svg width="16" height="16"><rect width="100%" height="100%"/></svg></button>
+    <button class="icon-btn menu" aria-label="More" style="height: ${menu}px"><svg width="4" height="16"><title>Menu</title><rect width="100%" height="100%"/></svg><span class="sr-only">More</span></button>
+  </div>
+</body></html>`;
+
+// A centred toolbar whose icon-only buttons carry a dot badge, one as a span and one as ::after, laid over
+// the top of the icon's columns. Each icon sits on the pill's middle.
+const BADGED = `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .tools { display: flex; align-items: center; gap: 8px; margin: 16px; }
+  .pill { height: 30px; padding: 0 12px; border: 1px solid #999; border-radius: 12px; background: #fff; font: inherit; }
+  .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
+  .dot { position: absolute; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+  .unread::after { content: ''; position: absolute; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+</style></head><body>
+  <div class="tools">
+    <button class="pill">Edit</button>
+    <button class="icon-btn bell" aria-label="Alerts"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg><span class="dot"></span></button>
+    <button class="icon-btn unread" aria-label="Inbox"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+  </div>
+</body></html>`;
+
 function page(html) {
   const dir = mkdtempSync(join(tmpdir(), 'ui-inspect-test-'));
   writeFileSync(join(dir, 'page.html'), html);
@@ -374,6 +408,17 @@ test('optical-align still reads a pair under a labelled stretched link or a clos
   for (const layer of ['link', 'closed']) {
     assert.equal(alignFindings(SHELL({ shift: 1.25, layer })).flatMap((f) => f.selectors).length, 2, layer);
   }
+});
+
+test('optical-align holds an icon-only button to the middle of the controls beside it', { skip: NO_CHROME }, () => {
+  const off = alignFindings(TOOLBAR({ eye: 32, menu: 28 }));
+  assert.deepEqual(off.flatMap((f) => f.selectors).sort(), ['div.tools > button.icon-btn.eye', 'div.tools > button.icon-btn.menu']);
+  assert.match(off[0].message, /^Icon-only control off the middle of the controls beside it: "Show AI view" \(div\.tools > button\.icon-btn\.eye\) 1px high; "More" \(div\.tools > button\.icon-btn\.menu\) 1px low$/);
+  assert.deepEqual(alignFindings(TOOLBAR({ eye: 30, menu: 30 })), []);
+});
+
+test('optical-align reads an icon-only button by its icon, not a dot badge laid over it', { skip: NO_CHROME }, () => {
+  assert.deepEqual(alignFindings(BADGED), []);
 });
 
 test('a config that is not valid JSON, or whose exceptions are wrong, is a usage error naming the file', () => {

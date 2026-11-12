@@ -42,9 +42,13 @@ export function judge(m, frames, { allow = [] } = {}) {
   if (m.type.sizeCount > 9) add('WARN', 'size-count', `${m.type.sizeCount} font sizes (${m.type.sizes.join(', ')} px).`, 'Map each size onto the type scale; an app screen needs about six.');
   if (m.type.small.length) add('WARN', 'small-text', `${m.type.small.length} text element(s) under 12px: ` + quote(m.type.small, 3, (t) => `${named(t)} ${t.size}px`), 'Nothing meant to be read goes below 12px.', m.type.small);
   if (!narrow && m.type.measureChars > 88) add('WARN', 'measure', `The longest paragraph runs about ${m.type.measureChars} characters per line.`, 'Cap running text at 45 to 75 characters (max-width: 65ch).');
-  const off = m.alignment.off;
-  if (off.length) add('FAIL', 'optical-align', 'Icon off the middle of the text beside it: ' + quote(off, 4, (o) => `${named(o)} ${Math.abs(o.gap)}px ${o.gap > 0 ? 'low' : 'high'} against the ${o.centre.replace('-', ' ')}`),
+  const side = (o) => `${Math.abs(o.gap)}px ${o.gap > 0 ? 'low' : 'high'}`;
+  const off = m.alignment.off.filter((o) => o.centre !== 'controls');
+  if (off.length) add('FAIL', 'optical-align', 'Icon off the middle of the text beside it: ' + quote(off, 4, (o) => `${named(o)} ${side(o)} against the ${o.centre.replace('-', ' ')}`),
     'Move the icon (a translate on the icon or its wrapper) until its middle meets the middle of the letters. For an icon meant to centre on another height, add an exception to .design-toolkit.json.', off);
+  const offRow = m.alignment.off.filter((o) => o.centre === 'controls');
+  if (offRow.length) add('FAIL', 'optical-align', 'Icon-only control off the middle of the controls beside it: ' + quote(offRow, 4, (o) => `${named(o)} ${side(o)}`),
+    'Give the controls in the row one height, or centre the row (align-items: center), so every middle meets. For a control meant to sit off the row\'s middle, pass --ignore.', offRow);
   if (m.page.sideScrollers) add('WARN', 'side-scroll', `${m.page.sideScrollers} row(s) scroll sideways with content past their edge.`, 'Wrap the row, or show that it scrolls (a fade or a partial item). Mark a deliberate scroller with data-scroll-x.');
   return out;
 }

@@ -7,12 +7,15 @@ import { cardTooTallMessage } from './lib/card-limit.mjs';
 import { launchBrowser, useBundledChromiumIfNeeded } from './lib/launch-browser.mjs';
 import { parseTheme, parseViewport, preparePage, toUrl } from './lib/page.mjs';
 
-const SCALE = 2;
+const SCALES = [2, 4];
+const EDGES = ['top', 'middle', 'bottom'];
+const GUIDE_COLOUR = '#00aaff';
 
 const USAGE = `usage: node capture.mjs --url <url|file> [--out dir] [--name base]
   [--viewport desktop|narrow|WIDTHxHEIGHT]... [--theme light|dark]...
   [--selector css]... [--margin px] [--theme-attr name] [--cookies file.json]
-  [--wait-for css] [--settle ms] [--blur] [--full-page] [--card]`;
+  [--wait-for css] [--settle ms] [--blur] [--full-page] [--card]
+  [--scale 2|4] [--guide css[:top|middle|bottom]]...`;
 
 function readOptions(argv) {
   const { values } = parseArgs({
@@ -32,10 +35,14 @@ function readOptions(argv) {
       blur: { type: 'boolean', default: false },
       'full-page': { type: 'boolean', default: false },
       card: { type: 'boolean', default: false },
+      scale: { type: 'string', default: '2' },
+      guide: { type: 'string', multiple: true, default: [] },
       help: { type: 'boolean', default: false },
     },
   });
   if (values.help || !values.url) return null;
+  const scale = Number(values.scale);
+  if (!SCALES.includes(scale)) throw new Error(`--scale must be one of ${SCALES.join(', ')}`);
   return {
     url: toUrl(values.url),
     out: resolve(values.out),
@@ -45,6 +52,8 @@ function readOptions(argv) {
     selectors: values.selector,
     fullPage: values['full-page'],
     card: values.card,
+    scale,
+    guides: values.guide.map(parseGuide),
     margin: Number(values.margin),
     themeAttr: values['theme-attr'],
     cookies: values.cookies ? JSON.parse(readFileSync(values.cookies, 'utf8')) : null,
@@ -52,6 +61,41 @@ function readOptions(argv) {
     settleMs: Number(values.settle),
     blur: values.blur,
   };
+}
+
+// A selector may hold colons of its own (:has, :hover), so only a known edge name after the last one counts.
+function parseGuide(spec) {
+  const at = spec.lastIndexOf(':');
+  const edge = spec.slice(at + 1);
+  return at > 0 && EDGES.includes(edge) ? { selector: spec.slice(0, at), edge } : { selector: spec, edge: 'middle' };
+}
+
+// A guide is a line one device pixel tall at a height measured from the page, so a fix is judged against
+// the reference it aims for, never against a line placed by eye. It lies over the page out of flow, so it
+// moves nothing it measures. It carries no label, which would cover the controls; the card names it.
+async function drawGuides(page, guides, scale) {
+  const drawn = await page.eval(({ guides, scale, colour }) => guides.map(({ selector, edge }) => {
+    const el = document.querySelector(selector);
+    if (!el) return { missing: selector };
+    const r = el.getBoundingClientRect();
+    const y = Math.round((r.top + scrollY + { top: 0, middle: r.height / 2, bottom: r.height }[edge]) * scale) / scale;
+    const line = document.documentElement.appendChild(document.createElement('div'));
+    // A box under 1px tall still paints a whole CSS pixel, so a 1px line is scaled down to one device pixel.
+    const look = { pointerEvents: 'none', left: '0', height: '1px', margin: '0', padding: '0', border: '0', background: colour, transform: `scaleY(${1 / scale})`, transformOrigin: '0 0' };
+    // An open modal dialog or popover paints in the top layer, above any z-index, so a guide for something
+    // in it joins the top layer after it, pinned to the viewport the dialog is pinned to.
+    if (el.closest(':modal, :popover-open')) {
+      line.popover = 'manual';
+      Object.assign(line.style, look, { position: 'fixed', inset: 'auto', top: `${y - scrollY}px`, width: '100vw', overflow: 'visible' });
+      line.showPopover();
+    } else {
+      Object.assign(line.style, look, { position: 'absolute', zIndex: '2147483647', top: `${y}px`, width: `${document.documentElement.scrollWidth}px` });
+    }
+    return { selector, edge, y };
+  }), { guides, scale, colour: GUIDE_COLOUR });
+  const missing = drawn.find((g) => g.missing);
+  if (missing) throw new Error(`--guide "${missing.missing}" matched nothing`);
+  return drawn;
 }
 
 // Several selectors crop to the union of their boxes, so a menu that overflows its dialog fits without a wide margin.
@@ -82,24 +126,25 @@ async function fullPageClip(page) {
   return { x: 0, y: 0, ...size, scale: 1 };
 }
 
-function refuseTallCard(clip, viewport) {
+function refuseTallCard(clip, viewport, scale) {
   const box = clip ?? viewport;
-  const tooTall = cardTooTallMessage(Math.round(box.width * SCALE), Math.round(box.height * SCALE));
+  const tooTall = cardTooTallMessage(Math.round(box.width * scale), Math.round(box.height * scale));
   if (tooTall) throw new Error(tooTall);
 }
 
 async function shoot(browser, opts, viewport, theme) {
-  const page = await browser.newPage({ width: viewport.width, height: viewport.height, dsf: SCALE });
+  const page = await browser.newPage({ width: viewport.width, height: viewport.height, dsf: opts.scale });
   try {
     await preparePage(page, opts, theme);
     const clip = opts.selectors.length ? await clipFor(page, opts.selectors, opts.margin) : opts.fullPage ? await fullPageClip(page) : null;
-    if (opts.card) refuseTallCard(clip, viewport);
+    if (opts.card) refuseTallCard(clip, viewport, opts.scale);
+    const guides = await drawGuides(page, opts.guides, opts.scale);
     const params = { format: 'png', captureBeyondViewport: !!clip, ...(clip && { clip }) };
     const { data } = await page.send('Page.captureScreenshot', params, 45000);
     const file = join(opts.out, `${opts.name}-${viewport.name}-${theme}.png`);
     writeFileSync(file, Buffer.from(data, 'base64'));
     const brokenImages = await page.eval(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src')));
-    return { file, viewport: viewport.name, theme, scale: SCALE, clip, brokenImages, pageErrors: page.consoleErrors };
+    return { file, viewport: viewport.name, theme, scale: opts.scale, clip, guides, brokenImages, pageErrors: page.consoleErrors };
   } finally {
     await page.close();
   }

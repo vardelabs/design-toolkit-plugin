@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import { findChrome } from '../skills/design-spec/scripts/lib/cdp.mjs';
 import { launchBrowser } from '../skills/design-spec/scripts/lib/launch-browser.mjs';
 
@@ -85,6 +86,101 @@ test('a selector that matches nothing fails loudly', { skip: NO_CHROME }, () => 
   const run = spawnSync(process.execPath, [CAPTURE, '--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#missing', '--theme', 'light'], { encoding: 'utf8' });
   assert.equal(run.status, 1);
   assert.match(run.stderr, /--selector "#missing" matched nothing/);
+});
+
+// PNG rows as RGB triples, for the guide tests. Chrome writes 8-bit RGB or RGBA with per-row filters.
+function pngRows(file) {
+  const png = readFileSync(file);
+  const width = png.readUInt32BE(16);
+  const channels = { 2: 3, 6: 4 }[png[25]];
+  const chunks = [];
+  for (let at = 8; at < png.length; at += 12 + png.readUInt32BE(at)) {
+    if (png.toString('latin1', at + 4, at + 8) === 'IDAT') chunks.push(png.subarray(at + 8, at + 8 + png.readUInt32BE(at)));
+  }
+  const raw = inflateSync(Buffer.concat(chunks));
+  const stride = width * channels;
+  const rows = [];
+  let prior = Buffer.alloc(stride);
+  for (let y = 0; y * (stride + 1) < raw.length; y++) {
+    const filter = raw[y * (stride + 1)];
+    const line = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    for (let x = 0; x < stride; x++) {
+      const left = x >= channels ? line[x - channels] : 0;
+      const up = prior[x];
+      const upLeft = x >= channels ? prior[x - channels] : 0;
+      const p = left + up - upLeft;
+      const paeth = Math.abs(p - left) <= Math.abs(p - up) && Math.abs(p - left) <= Math.abs(p - upLeft) ? left : Math.abs(p - up) <= Math.abs(p - upLeft) ? up : upLeft;
+      line[x] = (line[x] + [0, left, up, (left + up) >> 1, paeth][filter]) & 255;
+    }
+    rows.push(line);
+    prior = line;
+  }
+  return { width, channels, rows };
+}
+
+const GUIDE_BLUE = (rgb) => rgb[0] < 40 && rgb[1] > 140 && rgb[1] < 200 && rgb[2] > 220;
+
+test('--guide draws one device-pixel line at the measured middle, and --scale 4 makes it four times the CSS size', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const [shot] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--margin', '10', '--viewport', '800x600', '--theme', 'light', '--scale', '4', '--guide', '#box']);
+  assert.deepEqual(pngSize(shot.file), { width: (200 + 20) * 4, height: (120 + 20) * 4 });
+  assert.deepEqual(shot.guides, [{ selector: '#box', edge: 'middle', y: 160 }]);
+  const { channels, rows } = pngRows(shot.file);
+  // Column 2 sits left of the label, inside the margin; the box's middle is 70 CSS px into the crop.
+  const blue = rows.flatMap((row, y) => (GUIDE_BLUE(row.subarray(2 * channels, 2 * channels + 3)) ? [y] : []));
+  assert.deepEqual(blue, [70 * 4]);
+});
+
+test('--guide takes an edge after the last colon, keeps a pseudo-class in the selector, and fails on no match', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const [shot] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--viewport', '800x600', '--theme', 'light', '--guide', '#box:bottom', '--guide', 'div:not(#attr)']);
+  assert.deepEqual(shot.guides.map((g) => [g.selector, g.edge, g.y]), [['#box', 'bottom', 220], ['div:not(#attr)', 'middle', 160]]);
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', join(dir, 'fixture.html'), '--out', dir, '--guide', '#missing:top', '--theme', 'light'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /--guide "#missing" matched nothing/);
+  const badScale = spawnSync(process.execPath, [CAPTURE, '--url', join(dir, 'fixture.html'), '--out', dir, '--scale', '3'], { encoding: 'utf8' });
+  assert.equal(badScale.status, 1);
+  assert.match(badScale.stderr, /--scale must be one of 2, 4/);
+});
+
+test('--guide draws above an open modal dialog, which paints over any z-index', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  writeFileSync(join(dir, 'modal.html'), `<!doctype html><body style="margin:0"><dialog id="d" style="margin:0; top:100px; left:100px; padding:20px; border:0; background:#eee">
+    <div id="field" style="width:200px; height:40px; background:#888"></div></dialog><script>d.showModal()</script></body>`);
+  const [shot] = capture(['--url', join(dir, 'modal.html'), '--out', dir, '--selector', '#d', '--margin', '10', '--viewport', '800x600', '--theme', 'light', '--scale', '4', '--guide', '#field']);
+  assert.deepEqual(shot.guides, [{ selector: '#field', edge: 'middle', y: 140 }]);
+  const { channels, rows } = pngRows(shot.file);
+  // Column 30 CSS px in lies inside the dialog's padding; the field's middle is 50 CSS px into the crop.
+  const x = 30 * 4 * channels;
+  assert.deepEqual(rows.flatMap((row, y) => (GUIDE_BLUE(row.subarray(x, x + 3)) ? [y] : [])), [50 * 4]);
+});
+
+test('the card stacks guide rows in one column, Before above After and light above dark', { skip: NO_CHROME }, async () => {
+  const dir = workdir();
+  const pair = sampleShots(dir);
+  const rows = [['Before (light)', pair.light], ['After (light)', pair.light], ['Before (dark)', pair.dark], ['After (dark)', pair.dark]].map(([label, src]) => ({ label, src }));
+  fillTemplate(dir, 'card.html', 'card-data', {
+    ref: 'example-org/example-app#3', status: 'Draft', title: 'Synthetic alignment fix', summary: 'One line.',
+    viewport: '800x600', source: 'synthetic', captured: 'now', guides: [{ label: 'Box on the line', lookFor: 'The box middle on the line.', rows }],
+  });
+  const browser = await launchBrowser({ warn: () => {} });
+  let laid;
+  try {
+    const page = await browser.newPage();
+    await page.goto(pathToFileURL(join(dir, 'card.html')).href, { timeoutMs: 5000, settleMs: 0 });
+    laid = await page.eval(() => [...document.querySelectorAll('.guides .guide-row')].map((r) => {
+      const box = r.getBoundingClientRect();
+      return { label: r.querySelector('.theme').textContent, left: Math.round(box.left), top: Math.round(box.top) };
+    }));
+  } finally {
+    await browser.close();
+  }
+  assert.deepEqual(laid.map((r) => r.label), rows.map((r) => r.label));
+  assert.equal(new Set(laid.map((r) => r.left)).size, 1, 'one column');
+  assert.ok(laid.every((r, i) => i === 0 || r.top > laid[i - 1].top), 'each row below the last');
+  const [card] = capture(['--url', join(dir, 'card.html'), '--out', dir, '--name', 'card', '--selector', '.card', '--margin', '0', '--theme', 'light', '--viewport', '1300x900']);
+  assert.deepEqual(card.brokenImages, []);
+  assert.deepEqual(card.pageErrors, []);
 });
 
 function sampleShots(dir) {
