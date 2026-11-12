@@ -1,6 +1,6 @@
 # Design Toolkit
 
-**Version:** 0.15.0 | **Status:** Beta | **Author:** Varde Labs
+**Version:** 0.15.1 | **Status:** Beta | **Author:** Varde Labs
 
 Design review tooling for UI work: `design-spec` makes the review material, `ui-inspect` measures the screen first, `design-audit` lists what is generic or broken on an existing screen, `clean-copy` cuts interface copy that should not exist, `design-system-sync` republishes a repo's Design System library after a merge, `site-taste` gives marketing pages an art direction, and `design-system-doc` writes a repo's `DESIGN.md` from its real tokens.
 

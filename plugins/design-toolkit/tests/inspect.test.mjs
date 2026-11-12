@@ -263,6 +263,17 @@ const BADGED = `<!doctype html><html><head><style>
   </div>
 </body></html>`;
 
+// An icon beside a capital, with a dot badge laid over the icon. The icon sits on the capital's middle.
+const LETTER_BADGED = `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .item { display: flex; align-items: center; gap: 8px; position: relative; margin: 16px; }
+  .unread::before { content: ''; position: absolute; top: 0; left: 12px; width: 8px; height: 8px; border-radius: 4px; background: #d22; }
+  .dot { position: absolute; top: 0; left: 12px; width: 8px; height: 8px; border-radius: 4px; background: #d22; }
+</style></head><body>
+  <a class="item" href="#"><svg width="20" height="20" style="transform: translateY(-0.75px)"><rect x="4" y="4" width="12" height="12"/></svg><span class="dot"></span><span>Inbox</span></a>
+  <a class="item unread" href="#"><svg width="20" height="20" style="transform: translateY(-0.75px)"><rect x="4" y="4" width="12" height="12"/></svg><span>Inbox</span></a>
+</body></html>`;
+
 function page(html) {
   const dir = mkdtempSync(join(tmpdir(), 'ui-inspect-test-'));
   writeFileSync(join(dir, 'page.html'), html);
@@ -419,6 +430,10 @@ test('optical-align holds an icon-only button to the middle of the controls besi
 
 test('optical-align reads an icon-only button by its icon, not a dot badge laid over it', { skip: NO_CHROME }, () => {
   assert.deepEqual(alignFindings(BADGED), []);
+});
+
+test('optical-align reads an icon beside a capital by its icon, not a dot badge laid over it', { skip: NO_CHROME }, () => {
+  assert.deepEqual(alignFindings(LETTER_BADGED), []);
 });
 
 test('a config that is not valid JSON, or whose exceptions are wrong, is a usage error naming the file', () => {

@@ -86,7 +86,7 @@ async function drawGuides(page, guides, scale) {
     // in it joins the top layer after it, pinned to the viewport the dialog is pinned to.
     if (el.closest(':modal, :popover-open')) {
       line.popover = 'manual';
-      Object.assign(line.style, look, { position: 'fixed', inset: 'auto', top: `${y - scrollY}px`, width: '100vw', overflow: 'visible' });
+      Object.assign(line.style, look, { position: 'fixed', inset: 'auto', left: '0', top: `${y - scrollY}px`, width: '100vw', overflow: 'visible' });
       line.showPopover();
     } else {
       Object.assign(line.style, look, { position: 'absolute', zIndex: '2147483647', top: `${y}px`, width: `${document.documentElement.scrollWidth}px` });

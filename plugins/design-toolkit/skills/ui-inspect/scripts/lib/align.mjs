@@ -171,18 +171,19 @@ function locatePair({ key, index, badge }) {
   const covered = [a, ...others].some(underLayer);
   hitStyle.remove();
   if (covered) return null;
-  // A badge laid over an icon-only control (a dot, a count) paints in the icon's columns, where its ink
-  // would read as the icon's. It is hidden for the shot, then shown again.
-  if (control) {
-    const sheet = document.head.appendChild(document.createElement('style'));
-    sheet.id = badge;
-    sheet.textContent = `[${badge}="self"], [${badge}]::before, [${badge}]::after { visibility: hidden !important; }`;
-    for (const el of [control, ...control.querySelectorAll('*')]) {
-      if (icon.contains(el)) continue;
-      const placed = (pseudo) => /absolute|fixed/.test(getComputedStyle(el, pseudo).position);
-      if (!el.contains(icon) && placed(null)) el.setAttribute(badge, 'self');
-      else if (placed('::before') || placed('::after')) el.setAttribute(badge, 'pseudo');
-    }
+  // A badge laid over an icon (a dot, a count) paints in the icon's columns, where its ink would read as
+  // the icon's. It is hidden for the shot, then shown again. An icon-only control is searched inside the
+  // control, an icon beside a letter inside the item's row.
+  const scope = control ?? row;
+  const sheet = document.head.appendChild(document.createElement('style'));
+  sheet.id = badge;
+  sheet.textContent = `[${badge}="self"], [${badge}]::before, [${badge}]::after { visibility: hidden !important; }`;
+  for (const el of [scope, ...scope.querySelectorAll('*')]) {
+    if (icon.contains(el)) continue;
+    const placed = (pseudo) => /absolute|fixed/.test(getComputedStyle(el, pseudo).position);
+    const holdsPair = el.contains(icon) || (letter && el.contains(letter.startContainer));
+    if (!holdsPair && placed(null)) el.setAttribute(badge, 'self');
+    else if (placed('::before') || placed('::after')) el.setAttribute(badge, 'pseudo');
   }
   const all = [a, ...others];
   const left = Math.floor(Math.min(...all.map((r) => r.left)));
