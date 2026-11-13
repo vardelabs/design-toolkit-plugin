@@ -84,10 +84,8 @@ function staticPage(sources) {
   for (const img of document.images) {
     img.removeAttribute('loading');
     img.src = sources[img.getAttribute('src')] ?? img.getAttribute('src');
-    const zoom = img.parentElement;
-    if (zoom?.matches('figure > button')) zoom.replaceWith(img);
   }
-  document.querySelectorAll('script, dialog').forEach((node) => node.remove());
+  document.querySelectorAll('script').forEach((node) => node.remove());
   const styles = [...document.querySelectorAll('style')].filter((s) => !s.closest('main')).map((s) => s.outerHTML);
   return [document.querySelector('title')?.outerHTML ?? '', ...styles, document.querySelector('main').outerHTML].join('\n');
 }
