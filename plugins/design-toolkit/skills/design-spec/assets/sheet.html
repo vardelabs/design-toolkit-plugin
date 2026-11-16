@@ -198,15 +198,18 @@
   .colhead { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
   figure { margin: 0; }
   .open { display: block; max-width: 100%; cursor: zoom-in; }
-  figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+  figure img { display: block; width: var(--page-width, auto); max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
   .close { display: none; }
   /* A shot opens as its own figure targeted by the URL fragment, so the viewer needs no script and no second
      copy of the image. The close link fills the overlay's one grid cell above the image, so any click closes
-     it, and a wheel or a swipe still scrolls the overlay that holds it. */
-  figure:target { position: fixed; inset: 0; z-index: 10; display: grid; grid-template: minmax(100%, max-content) / minmax(100%, max-content); overflow: auto; overscroll-behavior: contain; background: rgba(10, 10, 12, 0.9); }
+     it, and a wheel or a swipe still scrolls the overlay that holds it. The cell is at least the overlay's size
+     and grows to fit the shot, so a shot wider than the screen scrolls into view from its left edge. */
+  figure:target { position: fixed; inset: 0; z-index: 10; display: grid; grid-template: minmax(max-content, 100%) / minmax(max-content, 100%); overflow: auto; overscroll-behavior: contain; background: rgba(10, 10, 12, 0.9); }
   figure:target .open, figure:target .close { grid-area: 1 / 1; }
   figure:target .open { place-self: center; max-width: none; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-  figure:target img { max-width: none; border-color: transparent; }
+  /* An opened shot fills the viewport when it can, but never shows smaller than on the page and never past
+     one CSS px per captured pixel, so it is always larger than the card and the overlay scrolls the rest. */
+  figure:target img { width: clamp(var(--page-width), calc(100vw - 32px), var(--full-width)); max-width: none; border-color: transparent; }
   figure:target .close { display: block; z-index: 1; cursor: zoom-out; color: #fff; text-decoration: none; }
   .close span { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); padding: 6px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); font-size: 14px; font-weight: 600; }
   .none { font-size: 13px; color: var(--muted); padding: 16px; border: 1px dashed var(--line); border-radius: 8px; }
@@ -273,7 +276,7 @@
 
   // Shots are captured at 2x, so half the natural width shows them at true size and never upscales. A zoom
   // shows every captured pixel instead, capped at its column, so the changed element reads large.
-  // The artifact viewer blocks a link to a published file, so a shot opens full size in the page itself.
+  // The artifact viewer blocks a link to a published file, so a shot opens larger in the page itself.
   // Closing links to a fragment no element has, so the page keeps its scroll position.
   let shotCount = 0;
   function shot(src, alt, zoomed) {
@@ -284,7 +287,10 @@
     open.href = `#${figure.id}`;
     const img = el('img');
     img.alt = alt;
-    img.onload = () => { img.style.width = img.naturalWidth / (zoomed ? 1 : 2) + 'px'; };
+    img.onload = () => {
+      img.style.setProperty('--page-width', `${img.naturalWidth / (zoomed ? 1 : 2)}px`);
+      img.style.setProperty('--full-width', `${img.naturalWidth}px`);
+    };
     img.src = src;
     open.append(img);
     const close = el('a', 'close');

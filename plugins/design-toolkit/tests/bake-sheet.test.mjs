@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -110,12 +111,40 @@ test('a baked sheet with no shots still names a capture time', { skip: NO_BROWSE
   assert.match(await bake(join(dir, 'sheet.html'), null), /Captured \d{4}-\d{2}-\d{2} \d{2}:\d{2} /);
 });
 
-async function bakeTemplate() {
+// zlib.crc32 arrived after Node 22.0, and the skill supports every Node 22, so the PNG checksum is computed here.
+function crc32(bytes) {
+  let crc = ~0;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return ~crc >>> 0;
+}
+
+// A solid grey PNG of the given size, so a test can tell the on-page width from the opened width.
+function greyPng(width, height) {
+  const chunk = (type, body) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(body.length);
+    const checksum = Buffer.alloc(4);
+    checksum.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type), body])));
+    return Buffer.concat([length, Buffer.from(type), body, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  const rows = Buffer.alloc((width + 1) * height, 0x80);
+  for (let row = 0; row < height; row++) rows[row * (width + 1)] = 0;
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+async function bakeTemplate(png = ONE_PIXEL_PNG) {
   const dir = mkdtempSync(join(tmpdir(), 'bake-sheet-'));
   mkdirSync(join(dir, 'shots'));
   const template = readFileSync(join(SKILL, 'assets', 'sheet.html'), 'utf8');
   const data = JSON.parse(/<script type="application\/json" id="sheet-data">([\s\S]*?)<\/script>/.exec(template)[1]);
-  for (const shot of new Set(JSON.stringify(data).match(/shots\/[\w-]+\.png/g))) writeFileSync(join(dir, shot), ONE_PIXEL_PNG);
+  for (const shot of new Set(JSON.stringify(data).match(/shots\/[\w-]+\.png/g))) writeFileSync(join(dir, shot), png);
   writeFileSync(join(dir, 'sheet.html'), fill(template, data));
   const out = join(dir, 'sheet-baked.html');
   writeFileSync(out, await bake(join(dir, 'sheet.html'), null));
@@ -169,6 +198,90 @@ test('a baked shot opens as a full-viewport overlay on its fragment and closes i
     assert.equal(state.closer, 'close');
     assert.equal(state.closed, 'static');
     assert.equal(state.after, state.before);
+  } finally {
+    await browser.close();
+  }
+});
+
+const SHOT_WIDTH = 1200;
+
+// Opens one plain shot and one zoom shot in turn and returns each one's width on the page and when opened.
+async function shotWidths(sheet, viewportWidth) {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ width: viewportWidth, height: 800, dsf: 1 });
+    await page.goto(toUrl(sheet), { settleMs: 0 });
+    return await page.eval(async () => {
+      const settle = (hash) => new Promise((done) => {
+        const poll = () => (location.hash === hash ? done() : setTimeout(poll, 10));
+        poll();
+      });
+      const measure = async (figure) => {
+        const img = figure.querySelector('img');
+        const onPage = img.getBoundingClientRect().width;
+        const column = figure.parentElement.getBoundingClientRect().width;
+        figure.querySelector('.open').click();
+        await settle(`#${figure.id}`);
+        const opened = img.getBoundingClientRect().width;
+        const scrolls = figure.scrollWidth > figure.clientWidth;
+        figure.querySelector('.close').click();
+        await settle('#shot-closed');
+        return { onPage, column, opened, scrolls };
+      };
+      return {
+        plain: await measure(document.querySelector('.themes figure')),
+        zoom: await measure(document.querySelector('.zoom figure')),
+      };
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
+test('an opened shot shows larger than on the page, up to one CSS px per captured pixel', { skip: NO_BROWSER }, async () => {
+  const sheet = await bakeTemplate(greyPng(SHOT_WIDTH, 40));
+  useBundledChromiumIfNeeded();
+  const wide = await shotWidths(sheet, 1440);
+  assert.equal(wide.plain.onPage, Math.min(SHOT_WIDTH / 2, wide.plain.column));
+  assert.equal(wide.zoom.onPage, Math.min(SHOT_WIDTH, wide.zoom.column));
+  assert.equal(wide.plain.opened, SHOT_WIDTH);
+  assert.equal(wide.zoom.opened, SHOT_WIDTH);
+
+  const narrow = await shotWidths(sheet, 390);
+  assert.ok(narrow.plain.onPage < SHOT_WIDTH / 2);
+  assert.equal(narrow.plain.opened, SHOT_WIDTH / 2, 'a narrow screen never shows the opened shot smaller than true size');
+  assert.equal(narrow.zoom.opened, SHOT_WIDTH);
+  assert.ok(narrow.plain.scrolls && narrow.zoom.scrolls, 'the overlay scrolls an opened shot wider than the screen');
+
+  const between = await shotWidths(sheet, 1000);
+  assert.equal(between.plain.opened, 1000 - 32, 'a shot wider than the screen opens at the screen width');
+  assert.equal(between.plain.scrolls, false, 'a shot that fits the screen does not scroll sideways');
+});
+
+test('an opened shot wider than the screen can be scrolled to every edge, and a click on any part of it closes it', { skip: NO_BROWSER }, async () => {
+  const sheet = await bakeTemplate(greyPng(SHOT_WIDTH, 40));
+  useBundledChromiumIfNeeded();
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ width: 390, height: 800, dsf: 1 });
+    await page.goto(toUrl(sheet), { settleMs: 0 });
+    const reach = await page.eval(async () => {
+      const figure = document.querySelector('.themes figure');
+      figure.querySelector('.open').click();
+      await new Promise((done) => {
+        const poll = () => (location.hash === `#${figure.id}` ? done() : setTimeout(poll, 10));
+        poll();
+      });
+      const img = figure.querySelector('img');
+      const left = img.getBoundingClientRect().left;
+      figure.scrollTo(figure.scrollWidth, 0);
+      const box = img.getBoundingClientRect();
+      const closer = document.elementFromPoint(box.right - 2, box.top + box.height / 2);
+      return { left, right: box.right, width: innerWidth, closes: Boolean(closer?.closest('.close')) };
+    });
+    assert.ok(reach.left >= 0, `the shot's left edge sits at ${reach.left}px, out of scroll reach`);
+    assert.ok(reach.right <= reach.width, `the shot's right edge sits at ${reach.right}px after a full scroll`);
+    assert.ok(reach.closes, 'a click on the scrolled-in part of the shot closes it');
   } finally {
     await browser.close();
   }
