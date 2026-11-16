@@ -246,20 +246,133 @@ const TOOLBAR = ({ eye, menu }) => `<!doctype html><html><head><style>
   </div>
 </body></html>`;
 
-// A centred toolbar whose icon-only buttons carry a dot badge, one as a span and one as ::after, laid over
-// the top of the icon's columns. Each icon sits on the pill's middle.
+// A centred toolbar whose icon-only buttons carry a dot badge, as a span or as ::after, laid over the top
+// of the icon's columns. The dots reach the icon by a translate, a margin, a scale of their own, a scaled
+// or zoomed-out wrapper, a fixed position inside a transformed or paint-contained element, the translate
+// property, or the static child of a zero-size placed anchor. Each icon sits on the pill's middle.
 const BADGED = `<!doctype html><html><head><style>
   body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
   .tools { display: flex; align-items: center; gap: 8px; margin: 16px; }
   .pill { height: 30px; padding: 0 12px; border: 1px solid #999; border-radius: 12px; background: #fff; font: inherit; }
   .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
   .dot { position: absolute; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
-  .unread::after { content: ''; position: absolute; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+  .unread::after, .shifted::after, .margined::after, .grown::after, .zoomed::after, .pinned::after, .slid::after { content: ''; position: absolute; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+  .shifted::after { top: -10px; transform: translateY(13px); }
+  .margined::after { top: -10px; margin-top: 13px; }
+  .grown::after { top: -3px; transform: scale(3); }
+  .zoom { display: inline-flex; transform: scale(1.4); }
+  .zoomed::after { top: 0; }
+  .pinned { transform: translateX(0); }
+  .pinned::after { position: fixed; }
+  .slid::after { top: -10px; translate: 0 13px; }
+  .contained { contain: paint; }
+  .contained::after { content: ''; position: fixed; top: 3px; left: 13px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+  .anchor { position: absolute; top: 3px; left: 13px; width: 0; height: 0; }
+  .anchor > i { display: block; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+  .shrunk { display: inline-flex; zoom: 0.5; }
+  .shrunk > .icon-btn::after { content: ''; position: absolute; top: 0; left: 0; width: 20px; height: 20px; background: #d22; }
+  .boxed { position: absolute; left: 16px; top: 120px; display: flex; align-items: center; gap: 8px; padding-top: 4px; contain: paint; }
+  .boxed > .pill { width: 50px; padding: 0; }
+  .boxed > .icon-btn::after { content: ''; position: fixed; left: 5px; top: 5px; width: 80px; height: 21px; background: #d22; }
+  ::before, ::after { z-index: -1; }
 </style></head><body>
   <div class="tools">
     <button class="pill">Edit</button>
     <button class="icon-btn bell" aria-label="Alerts"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg><span class="dot"></span></button>
     <button class="icon-btn unread" aria-label="Inbox"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn shifted" aria-label="Drafts"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn margined" aria-label="Sent"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn grown" aria-label="Spam"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <span class="zoom"><button class="icon-btn zoomed" aria-label="Starred"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button></span>
+    <button class="icon-btn pinned" aria-label="Pinned"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn slid" aria-label="Archive"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn contained" aria-label="Muted"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
+    <button class="icon-btn" aria-label="Flagged"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg><span class="anchor"><i></i></span></button>
+    <span class="shrunk"><button class="icon-btn" aria-label="Tagged"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button></span>
+  </div>
+  <div class="boxed"><button class="pill">Edit</button><button class="icon-btn" aria-label="Queued"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button></div>
+</body></html>`;
+
+const ICON = '<svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg>';
+
+// A centred toolbar whose 20px pill sets the band the shot reads: the icon's columns from 2px above to
+// 2px below the icon, rows 3 to 27 of each 30px button. Each button carries a red block behind its icon
+// whose box, if one term of the box math were dropped, would fill that band, so the block would stay in
+// the shot and move the ink: a margin, a translate, the translate property, its own scale, the button's
+// scale, a zoomed-out wrapper, a fixed position inside a paint-contained wrapper, or a skewed span. More
+// blocks fill the band while painting only part of it: one whose background-clip leaves its padding bare,
+// one cut by a clip-path, one whose top corners are rounded, one whose content is a digit, a grey backing
+// span that holds a dot, a white one whose image is a dot, a grey one with a thick red top border, an inset
+// red shadow, a red outline drawn inside it, or a list marker, a grey span whose own ::after is a dot, and
+// a grey canvas that draws a dot.
+// A clear ::after with a red top border, a clear one whose image is a dot, and a clear wrapper holding a
+// dot paint only part of the band too. Every block sits behind the icon, so only its box decides. Each icon
+// sits on the pill's middle.
+const BADGE_BOXES = `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .tools { display: flex; align-items: center; gap: 8px; margin: 16px; }
+  .pill { box-sizing: border-box; width: 80px; height: 20px; padding: 0 8px; border: 1px solid #999; border-radius: 10px; background: #fff; font: inherit; }
+  .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
+  .icon-btn::after { content: ''; position: absolute; top: 2px; left: 3px; width: 24px; height: 26px; background: #d22; }
+  .margin::after { margin-top: 10px; }
+  .shift::after { transform: translateY(10px); }
+  .prop::after { translate: 0 10px; }
+  .squash::after { transform: scale(1, 0.5); transform-origin: bottom; }
+  .big { scale: 0.8; }
+  .big::after { top: -1px; left: 0; width: 30px; }
+  .zoom { display: inline-flex; zoom: 0.5; }
+  .zoomed::after { top: -5px; left: -5px; width: 30px; height: 30px; }
+  .sealed { display: inline-flex; padding: 10px 0; contain: paint; }
+  .pinned::after { position: fixed; }
+  .skew { position: absolute; top: 2px; left: 3px; width: 24px; height: 26px; z-index: -1; background: #d22; transform: skewY(20deg); transform-origin: left top; }
+  .inner::after { inset: 0; width: auto; height: auto; padding-bottom: 14px; background-clip: content-box; }
+  .shaped::after { clip-path: inset(50% 0 0 0); }
+  .round::after { border-radius: 12px 12px 0 0; }
+  .counted::after { content: '3'; inset: 0; width: auto; height: auto; background: #eee; color: #d22; font: bold 12px/12px sans-serif; }
+  .layered::after { inset: 0; width: auto; height: auto; background: #fff radial-gradient(circle, #d22 3px, transparent 3px) no-repeat 11px 1px / 8px 8px; }
+  .framed::after { inset: 0; width: auto; height: auto; background: #eee; border-top: 12px solid #d22; }
+  .shadowed::after { inset: 0; width: auto; height: auto; background: #eee; box-shadow: inset 0 10px 0 #d22; }
+  .ringed::after { inset: -20px 0 0; width: auto; height: auto; background: #eee; outline: 10px solid #d22; outline-offset: -10px; }
+  .rim::after { inset: 0; width: auto; height: auto; background: none; border-top: 8px solid #d22; }
+  .imaged::after { inset: 0; width: auto; height: auto; background: radial-gradient(circle, #d22 3px, transparent 3px) no-repeat 11px 1px / 8px 8px; }
+  .backing, .gen, .veil, .listed, .drawn { position: absolute; inset: 0; z-index: -1; }
+  .backing, .gen, .listed, .drawn { background: #eee; }
+  .listed { display: list-item; list-style: disc inside; color: #d22; font: 24px/10px sans-serif; }
+  .backing > i, .veil > i { display: block; width: 6px; height: 6px; margin: 5px 0 0 13px; border-radius: 3px; background: #d22; }
+  .gen::after { content: ''; position: static; display: block; width: 6px; height: 6px; margin: 5px 0 0 13px; border-radius: 3px; background: #d22; }
+  .spanned::after { content: none; }
+  ::before, ::after { z-index: -1; }
+</style></head><body>
+  <div class="tools">
+    <input class="pill" value="Search">
+    ${[['margin', 'Margin'], ['shift', 'Shift'], ['prop', 'Prop'], ['squash', 'Squash'], ['big', 'Big'], ['inner', 'Inner'], ['shaped', 'Shaped'], ['round', 'Round'],
+    ['counted', 'Counted'], ['layered', 'Layered'], ['framed', 'Framed'], ['shadowed', 'Shadowed'], ['ringed', 'Ringed'], ['rim', 'Rimmed'], ['imaged', 'Imaged']]
+    .map(([kind, name]) => `<button class="icon-btn ${kind}" aria-label="${name}">${ICON}</button>`).join('\n    ')}
+    <span class="zoom"><button class="icon-btn zoomed" aria-label="Zoomed">${ICON}</button></span>
+    <span class="sealed"><button class="icon-btn pinned" aria-label="Pinned">${ICON}</button></span>
+    ${[['skew', 'Skewed'], ['backing', 'Backed', '<i></i>'], ['gen', 'Genned'], ['listed', 'Listed'], ['veil', 'Veiled', '<i></i>']]
+    .map(([kind, name, inner = '']) => `<button class="icon-btn spanned" aria-label="${name}">${ICON}<span class="${kind}">${inner}</span></button>`).join('\n    ')}
+    <button class="icon-btn spanned" aria-label="Drawn">${ICON}<canvas class="drawn" width="30" height="30"></canvas></button>
+  </div>
+  <script>
+    const g = document.querySelector('canvas.drawn').getContext('2d');
+    g.fillStyle = '#d22'; g.beginPath(); g.arc(15, 6, 3, 0, 2 * Math.PI); g.fill();
+  </script>
+</body></html>`;
+
+// A static icon-only button whose ::after is placed against the page, not the button: its box, read
+// against the button, would cover the icon, though the block covers only the icon's left side.
+const UNPLACED = `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .tools { display: flex; align-items: center; gap: 8px; margin: 16px; }
+  .pill { box-sizing: border-box; width: 50px; height: 20px; padding: 0; border: 1px solid #999; border-radius: 12px; background: #fff; font: inherit; }
+  .plain { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
+  .plain::after { content: ''; position: absolute; top: 0; left: 0; width: 86px; height: 30px; background: #d22; }
+  ::before, ::after { z-index: -1; }
+</style></head><body>
+  <div class="tools">
+    <input class="pill" value="Search">
+    <button class="plain" aria-label="Plain"><svg width="20" height="20"><rect x="4" y="4" width="12" height="12"/></svg></button>
   </div>
 </body></html>`;
 
@@ -272,6 +385,39 @@ const LETTER_BADGED = `<!doctype html><html><head><style>
 </style></head><body>
   <a class="item" href="#"><svg width="20" height="20" style="transform: translateY(-0.75px)"><rect x="4" y="4" width="12" height="12"/></svg><span class="dot"></span><span>Inbox</span></a>
   <a class="item unread" href="#"><svg width="20" height="20" style="transform: translateY(-0.75px)"><rect x="4" y="4" width="12" height="12"/></svg><span>Inbox</span></a>
+</body></html>`;
+
+// An active nav item: light text and icon on a blue pill laid under the whole item, as the item's own
+// ::before or as a span, or as ::before with an unread dot as ::after on part of the icon. The pill is the
+// ground, so it stays in the shot and the pair is read on it; the dot is hidden. A turned span pill and a
+// scrolled item's pill are hidden, since their boxes cannot be trusted. A pill in an item that clips its
+// overflow or contains its paint still fills the band the shot reads, and stays. With dark text, each of
+// these fills the band by its box but not by its paint, so it is hidden: a scrolled item's red ::after,
+// whose unscrolled box would fill it; a blue ::after drawn above the icon; a red block cut short by a
+// parent that clips its overflow, or one that contains its paint; a pill whose round end leaves the band's
+// corner on the page; and a grey square laid behind the icon alone, which would read as the icon's ink.
+const ACTIVE_PILL = ({ pill, shift }) => `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; color: #111; font: 13px/20px system-ui, sans-serif; }
+  .item { display: flex; align-items: center; gap: 8px; position: relative; isolation: isolate; margin: 16px; padding: 4px 8px; color: #fff; }
+  .pseudo::before, .dotted::before, .scrolled::before, .clipped::before, .sealed::before, .rounded::before, .pill { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: 8px; background: #1d4ed8; }
+  .clipped { overflow: hidden; }
+  .sealed { contain: paint; }
+  .rounded { padding: 4px 2px; }
+  .rounded::before { border-radius: 14px; }
+  .front, .cut, .cutpaint, .rounded, .square { color: #111; }
+  .front::after { content: ''; position: absolute; inset: 0; z-index: 1; background: #1d4ed8; }
+  .cutter { position: relative; flex: none; align-self: flex-start; width: 40px; height: 20px; margin-right: -48px; overflow: hidden; }
+  .cutpaint > .cutter { overflow: visible; contain: paint; }
+  .cutter > i { position: absolute; top: -4px; left: -2px; width: 60px; height: 28px; background: #d22; }
+  .backer { position: absolute; top: 3px; left: 8px; width: 20px; height: 21.5px; z-index: -1; background: #555; }
+  .turned > .pill { transform: rotate(180deg); }
+  .scrolled, .stained { height: 20px; overflow: hidden; align-items: flex-start; }
+  .scrolled > *, .stained > * { flex: none; margin-top: 30px; }
+  .stained { color: #111; }
+  .stained::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40px; z-index: -1; background: #d22; }
+  .dotted::after { content: ''; position: absolute; top: 4px; left: 20px; width: 6px; height: 6px; border-radius: 3px; background: #d22; }
+</style></head><body>
+  <a class="item ${pill === 'span' ? '' : pill}" href="#">${['span', 'turned'].includes(pill) ? '<span class="pill"></span>' : ''}${{ cut: '<span class="cutter"><i></i></span>', cutpaint: '<span class="cutter"><i></i></span>', square: '<span class="backer"></span>' }[pill] ?? ''}<svg width="20" height="20" style="transform: translateY(${shift - 0.75}px)"><rect x="4" y="4" width="12" height="12" fill="currentColor"/></svg><span>Inbox</span></a>
 </body></html>`;
 
 function page(html) {
@@ -432,8 +578,28 @@ test('optical-align reads an icon-only button by its icon, not a dot badge laid 
   assert.deepEqual(alignFindings(BADGED), []);
 });
 
+test('optical-align hides a badge that covers part of the icon, whatever moves its box', { skip: NO_CHROME }, () => {
+  assert.deepEqual(alignFindings(BADGE_BOXES), []);
+  assert.deepEqual(alignFindings(UNPLACED), []);
+});
+
 test('optical-align reads an icon beside a capital by its icon, not a dot badge laid over it', { skip: NO_CHROME }, () => {
   assert.deepEqual(alignFindings(LETTER_BADGED), []);
+});
+
+test('optical-align reads an icon beside a capital on the pill laid under its item, as ::before, as a span, or beside an ::after dot', { skip: NO_CHROME }, () => {
+  for (const [pill, item] of [['pseudo', 'a.item.pseudo'], ['span', 'a.item'], ['dotted', 'a.item.dotted'], ['clipped', 'a.item.clipped'], ['sealed', 'a.item.sealed']]) {
+    assert.deepEqual(alignFindings(ACTIVE_PILL({ pill, shift: 0 })), [], pill);
+    assert.deepEqual(alignFindings(ACTIVE_PILL({ pill, shift: 1.25 })).flatMap((f) => f.selectors), [`${item} > svg`], pill);
+  }
+});
+
+test('optical-align hides a layer it cannot be sure is the ground: a turned or scrolled pill, a scrolled block, one above the icon, one cut short, a round end, a square behind the icon', { skip: NO_CHROME }, () => {
+  for (const pill of ['turned', 'scrolled']) assert.deepEqual(alignFindings(ACTIVE_PILL({ pill, shift: 1.25 })), [], pill);
+  for (const pill of ['stained', 'front', 'cut', 'cutpaint', 'rounded', 'square']) {
+    assert.deepEqual(alignFindings(ACTIVE_PILL({ pill, shift: 0 })), [], pill);
+    assert.deepEqual(alignFindings(ACTIVE_PILL({ pill, shift: 1.25 })).flatMap((f) => f.selectors), [`a.item.${pill} > svg`], pill);
+  }
 });
 
 test('a config that is not valid JSON, or whose exceptions are wrong, is a usage error naming the file', () => {

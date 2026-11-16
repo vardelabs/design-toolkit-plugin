@@ -13,7 +13,8 @@ const NO_ARC = existsSync(join(SCRIPTS, 'lib', 'arc.sh')) ? false : 'no lib/arc.
 
 // Stand-ins for the commands the script hands the link to. Each logs its arguments, so a test reads what
 // would have opened without opening anything on the machine running it.
-function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true, openWorks = true } = {}) {
+// The tests that check what opens run under auto, since the default opens nothing.
+function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true, openWorks = true, mode = 'auto' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'open-sheet-test-'));
   const log = join(dir, 'calls.log');
   const stub = (name, body) => {
@@ -24,7 +25,7 @@ function stubs({ system = 'Darwin', arcRunning = false, arcWorks = true, openWor
   stub('open', `exit ${openWorks ? 0 : 3}`);
   stub('pgrep', `exit ${arcRunning ? 0 : 1}`);
   stub('osascript', `cat > /dev/null; exit ${arcWorks ? 0 : 1}`);
-  return { dir, log, home: dir };
+  return { dir, log, home: dir, mode };
 }
 
 function run(env, args, scripts = SCRIPTS) {
@@ -42,6 +43,11 @@ test('every mode prints the link, so it can always go in the reply', () => {
   for (const mode of ['auto', 'browser-background', 'browser-foreground', 'app-pane', 'none', 'arc-background']) {
     assert.equal(run(stubs(), [URL, '--mode', mode]).out, URL, mode);
   }
+});
+
+test('with no mode set it prints the link and opens nothing', () => {
+  const result = run({ ...stubs({ arcRunning: true }), mode: undefined }, [URL]);
+  assert.deepEqual([result.status, result.out, result.calls], [0, URL, []]);
 });
 
 test('auto opens an arc background tab when that browser is running, and the default browser behind the app when not', { skip: NO_ARC }, () => {

@@ -406,7 +406,7 @@ test('zoom crops show every captured pixel, and context shots show half', { skip
   }
 });
 
-test('clicking a shot opens it full size in the page, and a click on it closes it', { skip: NO_CHROME }, async () => {
+test('clicking a shot opens that same image uncapped over the page, and a click anywhere closes it', { skip: NO_CHROME }, async () => {
   const dir = workdir();
   const pair = sampleShots(dir);
   fillTemplate(dir, 'sheet.html', 'sheet-data', { ...sheetData(), zooms: [], beforeAfter: [{ label: 'Box', lookFor: 'The box.', before: pair, after: pair }], states: [] });
@@ -414,16 +414,24 @@ test('clicking a shot opens it full size in the page, and a click on it closes i
   try {
     const page = await browser.newPage({ width: 1280, height: 800 });
     await page.goto(pathToFileURL(join(dir, 'sheet.html')).href, { timeoutMs: 5000, settleMs: 300 });
-    const result = await page.eval(() => {
-      const shot = document.querySelector('figure button');
-      const viewer = document.getElementById('viewer');
-      shot.click();
-      const opened = { open: viewer.open, src: viewer.querySelector('img').getAttribute('src'), shown: shot.querySelector('img').getAttribute('src') };
-      viewer.click();
-      return { ...opened, closed: !viewer.open, links: document.querySelectorAll('figure a').length };
+    const result = await page.eval(async () => {
+      // A fragment link navigates in a task after the click, not during it.
+      const arrive = (hash) => new Promise((done) => {
+        const poll = () => (location.hash === hash ? done() : setTimeout(poll, 10));
+        poll();
+      });
+      const figure = document.querySelector('figure');
+      const img = figure.querySelector('img');
+      figure.querySelector('.open').click();
+      await arrive(`#${figure.id}`);
+      const opened = { position: getComputedStyle(figure).position, width: img.getBoundingClientRect().width, trueWidth: parseFloat(img.style.width) };
+      document.elementFromPoint(2, 798).click();
+      await arrive('#shot-closed');
+      return { ...opened, closed: getComputedStyle(figure).position };
     });
-    assert.match(result.shown, /^shots\/.+\.png$/);
-    assert.deepEqual(result, { open: true, src: result.shown, shown: result.shown, closed: true, links: 0 });
+    assert.equal(result.position, 'fixed');
+    assert.equal(result.width, result.trueWidth);
+    assert.equal(result.closed, 'static');
   } finally {
     await browser.close();
   }
