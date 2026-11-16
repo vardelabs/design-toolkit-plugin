@@ -169,27 +169,154 @@ function locatePair({ key, index, badge }) {
   const hitStyle = document.head.appendChild(document.createElement('style'));
   hitStyle.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
   const covered = [a, ...others].some(underLayer);
+  const hits = document.elementsFromPoint(a.left + a.width / 2, a.top + a.height / 2);
   hitStyle.remove();
   if (covered) return null;
   // A badge laid over an icon (a dot, a count) paints in the icon's columns, where its ink would read as
-  // the icon's. It is hidden for the shot, then shown again. An icon-only control is searched inside the
-  // control, an icon beside a letter inside the item's row.
+  // the icon's. It is hidden for the shot, then shown again. Only a placed layer that paints its own ground
+  // and fills every band the shot reads (an active item's pill, a hover circle) is what the icon is read on,
+  // and stays; every other placed layer is hidden. Where the box cannot be known, the layer is hidden too,
+  // so a mistake hides a layer rather than leaving a badge in.
+  // An icon-only control is searched inside the control, an icon beside a letter inside the item's row.
   const scope = control ?? row;
   const sheet = document.head.appendChild(document.createElement('style'));
   sheet.id = badge;
-  sheet.textContent = `[${badge}="self"], [${badge}]::before, [${badge}]::after { visibility: hidden !important; }`;
-  for (const el of [scope, ...scope.querySelectorAll('*')]) {
-    if (icon.contains(el)) continue;
-    const placed = (pseudo) => /absolute|fixed/.test(getComputedStyle(el, pseudo).position);
-    const holdsPair = el.contains(icon) || (letter && el.contains(letter.startContainer));
-    if (!holdsPair && placed(null)) el.setAttribute(badge, 'self');
-    else if (placed('::before') || placed('::after')) el.setAttribute(badge, 'pseudo');
-  }
+  sheet.textContent = `[${badge}="self"], [${badge}~="before"]::before, [${badge}~="after"]::after { visibility: hidden !important; }`;
   const all = [a, ...others];
   const left = Math.floor(Math.min(...all.map((r) => r.left)));
   const top = Math.floor(Math.min(...all.map((r) => r.top))) - 2;
   const right = Math.ceil(Math.max(...all.map((r) => r.right)));
   const bottom = Math.ceil(Math.max(...all.map((r) => r.bottom))) + 2;
+  // The ink is read in the icon's columns, and the letter's, over the shot's full height, whose top and
+  // bottom rows give the ground; a ground layer has to fill all of that.
+  const sampled = [a, ...(letter ? others : [])].map((r) => ({ left: r.left, right: r.right, top, bottom }));
+  // Ground is one flat colour: an image, a border, an inset shadow, an outline (which a negative offset
+  // draws inside the box) or a list marker paints over part of it.
+  const paintsGround = (cs) => alpha(cs.backgroundColor) > 0.05 && cs.backgroundImage === 'none' && !/inset/.test(cs.boxShadow)
+    && cs.outlineStyle === 'none' && cs.display !== 'list-item';
+  // Content inside a layer (a child, a digit, its own ::before or ::after) paints over its ground, so only
+  // an empty layer is ground. An element that draws its own content (an image, a canvas, a form field)
+  // paints over its ground with no child or text, so it is never empty.
+  const bare = (el) => !el.matches('img, svg, canvas, video, iframe, object, embed, picture, input, select, textarea, meter, progress')
+    && !el.firstElementChild && !el.textContent.trim()
+    && ['::before', '::after'].every((pseudo) => getComputedStyle(el, pseudo).content === 'none');
+  // A layer is behind the icon only when the hit test at the icon's middle reaches the icon first. A
+  // pseudo-element is hit as its own element, so one drawn above the icon is never taken as behind it.
+  const behindIcon = (layer) => {
+    for (const hit of hits) {
+      if (icon.contains(hit)) return true;
+      if (hit === layer) return false;
+    }
+    return false;
+  };
+  const sides = ['Top', 'Right', 'Bottom', 'Left'];
+  const borders = (cs) => sides.map((side) => parseFloat(cs[`border${side}Width`]) || 0);
+  const paddings = (cs) => sides.map((side) => parseFloat(cs[`padding${side}`]) || 0);
+  const shrink = (r, [top, right, bottom, left]) => ({ left: r.left + left, top: r.top + top, right: r.right - right, bottom: r.bottom - bottom });
+  // Corner radii, circular and in px; a percentage or elliptical radius is not followed, so null.
+  const radiiOf = (cs) => {
+    const radii = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((corner) => cs[`border${corner}Radius`]);
+    return radii.some((radius) => /%|\s/.test(radius.trim())) ? null : radii.map((radius) => parseFloat(radius) || 0);
+  };
+  // A rounded box holds a rect when the rect is inside the box and each of the rect's corners that falls
+  // in a rounded corner lies within that corner's circle.
+  const holds = (box, radii, r) => {
+    if (r.left < box.left || r.right > box.right || r.top < box.top || r.bottom > box.bottom) return false;
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    return corners.every(([sx, sy], i) => {
+      const [x, y] = [sx < 0 ? r.left : r.right, sy < 0 ? r.top : r.bottom];
+      const [cx, cy] = [(sx < 0 ? box.left : box.right) - sx * radii[i], (sy < 0 ? box.top : box.bottom) - sy * radii[i]];
+      return (x - cx) * sx <= 0 || (y - cy) * sy <= 0 || Math.hypot(x - cx, y - cy) <= radii[i];
+    });
+  };
+  // A box shrunk on every side by 0.293 of its largest corner radius lies inside the rounded shape.
+  const rounded = (box, cs) => {
+    const radii = radiiOf(cs);
+    if (!radii) return null;
+    const cut = 0.293 * Math.max(...radii);
+    return shrink(box, [cut, cut, cut, cut]);
+  };
+  // The background shows inside the border, and inside the padding too for content-box; for any other
+  // clip the painted box is not known.
+  const paintBox = (box, cs) => {
+    if (cs.backgroundClip === 'border-box' || cs.backgroundClip === 'padding-box') return shrink(box, borders(cs));
+    if (cs.backgroundClip === 'content-box') return shrink(shrink(box, borders(cs)), paddings(cs));
+    return null;
+  };
+  const masked = (cs) => cs.clipPath !== 'none' || cs.maskImage !== 'none' || cs.clip !== 'auto';
+  const clips = (cs) => cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || /paint|strict|content/.test(cs.contain)
+    || cs.contentVisibility !== 'visible';
+  // Each ancestor that clips its overflow or contains its paint cuts the paint to its padding box. A
+  // clip-path, mask or clip cuts it in a shape the box cannot follow, so the paint is not known.
+  const clippedBy = (start, box) => {
+    for (let p = start; p && box; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (masked(cs)) return null;
+      if (!clips(cs)) continue;
+      const r = p.getBoundingClientRect();
+      const [left, top] = [r.left + p.clientLeft, r.top + p.clientTop];
+      const inner = rounded({ left, top, right: left + p.clientWidth, bottom: top + p.clientHeight }, cs);
+      box = inner && { left: Math.max(box.left, inner.left), top: Math.max(box.top, inner.top), right: Math.min(box.right, inner.right), bottom: Math.min(box.bottom, inner.bottom) };
+    }
+    return box;
+  };
+  // A layer is the ground the icon is read on when it paints a background that, once clipped, still
+  // fills every sampled band from behind the icon.
+  const isGround = (layer, cs, box, clipFrom) => {
+    const [painted, radii] = [paintBox(box, cs), radiiOf(cs)];
+    if (!paintsGround(cs) || masked(cs) || !painted || !radii) return false;
+    const clipped = clippedBy(clipFrom, painted);
+    return !!clipped && sampled.every((r) => holds(painted, radii, r) && holds(clipped, [0, 0, 0, 0], r)) && behindIcon(layer);
+  };
+  // A pseudo-element has no DOM box, so its box is read from its resolved offsets against the padding box
+  // of its own positioned element. Its margins and the translation of its transform move it too; a badge is
+  // often set on a corner with a negative margin or translate(50%, -50%).
+  const pseudoBox = (el, cs) => {
+    const base = el.getBoundingClientRect();
+    const px = (name) => parseFloat(cs[name]) || 0;
+    const outer = cs.boxSizing === 'border-box' ? [0, 0]
+      : [px('paddingLeft') + px('paddingRight') + px('borderLeftWidth') + px('borderRightWidth'), px('paddingTop') + px('paddingBottom') + px('borderTopWidth') + px('borderBottomWidth')];
+    const shift = cs.transform === 'none' ? new DOMMatrix() : new DOMMatrix(cs.transform);
+    const left = base.left + el.clientLeft + px('left') + px('marginLeft') + shift.e;
+    const top = base.top + el.clientTop + px('top') + px('marginTop') + shift.f;
+    return { left, top, right: left + px('width') + outer[0], bottom: top + px('height') + outer[1] };
+  };
+  // That box holds only for an absolute pseudo of a positioned, unscrolled element, moved at most by its
+  // transform's translation, inside elements that are not transformed, zoomed, filtered or given
+  // perspective. Anything else could be placed against another box or scaled, so it is hidden. A placed
+  // element is held to the same chain, since a transform makes its bounding box larger than its paint.
+  const unmoved = (cs) => cs.translate === 'none' && cs.rotate === 'none' && cs.scale === 'none' && cs.zoom === '1';
+  const flat = (cs) => cs.transform === 'none' && unmoved(cs) && cs.filter === 'none' && cs.perspective === 'none';
+  const flatChain = (el) => {
+    for (let p = el; p; p = p.parentElement) if (!flat(getComputedStyle(p))) return false;
+    return true;
+  };
+  const measurable = (el, cs) => {
+    if (cs.position === 'fixed' || !unmoved(cs) || getComputedStyle(el).position === 'static') return false;
+    if (el.scrollLeft || el.scrollTop) return false;
+    if (cs.transform !== 'none') {
+      const { a, b, c, d, is2D } = new DOMMatrix(cs.transform);
+      if (!is2D || a !== 1 || b !== 0 || c !== 0 || d !== 1) return false;
+    }
+    return flatChain(el);
+  };
+  const badgePseudo = (el, pseudo) => {
+    const cs = getComputedStyle(el, pseudo);
+    if (cs.content === 'none' || !/absolute|fixed/.test(cs.position)) return false;
+    return !(cs.content === '""' && measurable(el, cs) && isGround(el, cs, pseudoBox(el, cs), el));
+  };
+  for (const el of [scope, ...scope.querySelectorAll('*')]) {
+    if (icon.contains(el)) continue;
+    const holdsPair = el.contains(icon) || (letter && el.contains(letter.startContainer));
+    const cs = getComputedStyle(el);
+    if (!holdsPair && /absolute|fixed/.test(cs.position) && !(bare(el) && flatChain(el) && isGround(el, cs, el.getBoundingClientRect(), el.parentElement))) {
+      el.setAttribute(badge, 'self');
+      continue;
+    }
+    // Each pseudo-element is marked on its own: an item's ::before can be its pill while its ::after is a dot.
+    const marks = ['before', 'after'].filter((side) => badgePseudo(el, `::${side}`));
+    if (marks.length) el.setAttribute(badge, marks.join(' '));
+  }
   const dpr = devicePixelRatio;
   const band = (from, to) => [Math.round((from - left) * dpr), Math.round((to - left) * dpr)];
   const clip = { x: left + scrollX, y: top + scrollY, width: right - left, height: bottom - top };

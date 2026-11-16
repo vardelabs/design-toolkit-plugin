@@ -4,7 +4,7 @@
 #
 #   open-sheet.sh <url> [--mode MODE]
 #
-# MODE comes from --mode, else DESIGN_SPEC_OPEN, else auto:
+# MODE comes from --mode, else DESIGN_SPEC_OPEN, else none:
 #   auto                 arc-background where lib/arc.sh is present and that browser is running, else
 #                        browser-background
 #   browser-background   the default browser, left behind the app in use (open -g)
@@ -15,7 +15,7 @@
 # fall back to the default browser.
 here=$(cd "$(dirname "$0")" && pwd)
 url=""
-mode="${DESIGN_SPEC_OPEN:-auto}"
+mode="${DESIGN_SPEC_OPEN:-none}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --mode) [ $# -ge 2 ] || { echo "open-sheet: --mode needs a value" >&2; exit 2; }; mode="$2"; shift 2 ;;

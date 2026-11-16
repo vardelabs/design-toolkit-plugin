@@ -166,20 +166,20 @@ The quick card is one image. Every state goes in it, each with a title and a loo
    node <skill>/scripts/bake-sheet.mjs <scratch>/sheet.html <scratch>/sheet-baked.html
    ```
 
-   The bake renders the sheet headless and writes static HTML: plain `<img>` tags with each shot inline as a data URI, no lazy loading, and no script. The capture time comes from the newest shot file on disk, never from typed text. It fails when the sheet throws while it renders, or when any image source is relative or a script remains. When the baked page passes 12 MB it stops and asks for asset URLs: upload the shots with the Artifact tool (`asset: true`, `file_paths`), write a JSON map of each shot path to the `url` the result gives, and bake again with `--assets <map.json>`.
+   The bake renders the sheet headless and writes static HTML: plain `<img>` tags with each shot inline as a data URI, no lazy loading, and no script. The baked sheet keeps click-to-enlarge: each shot links to its own fragment, a CSS `:target` rule opens that same image full size over the page, and a click anywhere closes it. The capture time comes from the newest shot file on disk, never from typed text. It fails when the sheet throws while it renders, or when any image source is relative or a script remains. When the baked page passes 12 MB it stops and asks for asset URLs: upload the shots with the Artifact tool (`asset: true`, `file_paths`), write a JSON map of each shot path to the `url` the result gives, and bake again with `--assets <map.json>`.
 4. Check the baked sheet at phone width before you publish it: `node <skill>/scripts/capture.mjs --url <scratch>/sheet-baked.html --out <scratch> --name sheet-check --viewport 390x844 --full-page --theme light`. Every shot must show in that image.
 5. Publish `<scratch>/sheet-baked.html` with the Artifact tool (`icon`: `layout` on the first publish), with no `files`.
 6. Each later round, bake again and republish **the same file path** so the URL stays the same. Put the URL in the PR body the first time.
 7. Right after each publish, close the app's artifact pane: call `mcp__ccd_view__close_pane` with pane `artifact`. On the Claude desktop app a publish opens that pane by itself, even when no editor tool touched the `.html`. Skip this step when the open mode is `app-pane`, or where the session has no such tool or is not on screen.
-8. Right after each publish, run `<skill>/scripts/open-sheet.sh <artifact URL>`. It opens the sheet on the first publish only, the way the reviewer set. A republish to the same URL opens nothing, because the tab already open shows the new version on reload. The script remembers each URL it opened on this machine, so run it every round. It always prints the link, and the link always goes in the reply. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `auto`:
+8. Right after each publish, run `<skill>/scripts/open-sheet.sh <artifact URL>`. By default it opens nothing. A reviewer who wants a browser tab sets a mode, and the script then opens the sheet on the first publish only. A republish to the same URL opens nothing, because the tab already open shows the new version on reload. The script remembers each URL it opened on this machine, so run it every round. It always prints the link, and the link always goes in the reply. The mode comes from `--mode`, else the `DESIGN_SPEC_OPEN` environment variable, else `none`:
 
    | Mode | Opens |
    |---|---|
-   | `auto` (default) | `browser-background`. |
+   | `auto` | `browser-background`. |
    | `browser-background` | The default browser, left behind the app in use (`open -g`). |
    | `browser-foreground` | The default browser, brought to the front. |
    | `app-pane` | Nothing: the desktop app's artifact pane shows it, so step 7 leaves the pane open. |
-   | `none` | Nothing: the link in the reply is enough. |
+   | `none` (default) | Nothing: the link in the reply is enough. |
 
    Off macOS, every mode only prints the link. Set the default for a machine in the session environment, for example `"env": {"DESIGN_SPEC_OPEN": "browser-foreground"}` in Claude Code's `settings.json`.
 

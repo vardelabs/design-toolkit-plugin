@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { bake, capturedAt, chooseSources, PAGE_LIMIT_BYTES, pageSizeProblem, pathsOutsideShots, shotPaths } from '../skills/design-spec/scripts/bake-sheet.mjs';
 import { fill } from '../skills/design-spec/scripts/fill.mjs';
 import { findChrome } from '../skills/design-spec/scripts/lib/cdp.mjs';
+import { launchBrowser, useBundledChromiumIfNeeded } from '../skills/design-spec/scripts/lib/launch-browser.mjs';
+import { toUrl } from '../skills/design-spec/scripts/lib/page.mjs';
 import { findPlaywrightChromium } from '../skills/design-spec/scripts/lib/playwright-chromium.mjs';
 import { sheetProblems } from '../skills/design-spec/scripts/lib/sheet-check.mjs';
 
@@ -108,17 +110,68 @@ test('a baked sheet with no shots still names a capture time', { skip: NO_BROWSE
   assert.match(await bake(join(dir, 'sheet.html'), null), /Captured \d{4}-\d{2}-\d{2} \d{2}:\d{2} /);
 });
 
-test('the bake unwraps only the zoom buttons, never an overlay button', { skip: NO_BROWSER }, async () => {
+async function bakeTemplate() {
   const dir = mkdtempSync(join(tmpdir(), 'bake-sheet-'));
   mkdirSync(join(dir, 'shots'));
-  writeFileSync(join(dir, 'shots', 'a.png'), ONE_PIXEL_PNG);
-  const icon = `data:image/png;base64,${ONE_PIXEL_PNG.toString('base64')}`;
-  writeFileSync(join(dir, 'sheet.html'), '<title>x</title><main><figure><button><img alt="a" src="shots/a.png"></button></figure>'
-    + `<button class="attach"><img alt="attach" src="${icon}"></button></main>`
-    + '<script type="application/json" id="sheet-data">{"shot":"shots/a.png"}</script>');
-  const html = await bake(join(dir, 'sheet.html'), null);
-  assert.match(html, /<figure><img alt="a" src="data:image\/png/);
-  assert.match(html, /<button class="attach"><img alt="attach"/);
+  const template = readFileSync(join(SKILL, 'assets', 'sheet.html'), 'utf8');
+  const data = JSON.parse(/<script type="application\/json" id="sheet-data">([\s\S]*?)<\/script>/.exec(template)[1]);
+  for (const shot of new Set(JSON.stringify(data).match(/shots\/[\w-]+\.png/g))) writeFileSync(join(dir, shot), ONE_PIXEL_PNG);
+  writeFileSync(join(dir, 'sheet.html'), fill(template, data));
+  const out = join(dir, 'sheet-baked.html');
+  writeFileSync(out, await bake(join(dir, 'sheet.html'), null));
+  return out;
+}
+
+test('every baked shot links to its own figure and carries a close link, with one copy of each image', { skip: NO_BROWSER }, async () => {
+  const html = readFileSync(await bakeTemplate(), 'utf8');
+  const figures = html.match(/<figure\b[\s\S]*?<\/figure>/g);
+  assert.ok(figures.length >= 4);
+  const ids = figures.map((figure) => {
+    const id = /^<figure id="(shot-\d+)">/.exec(figure)?.[1];
+    assert.ok(id, `a figure has no shot id: ${figure.slice(0, 60)}`);
+    assert.match(figure, new RegExp(`<a class="open" href="#${id}"><img\\b`));
+    assert.match(figure, /<a class="close" href="#shot-closed"/);
+    assert.equal(figure.match(/<img\b/g).length, 1);
+    return id;
+  });
+  assert.equal(new Set(ids).size, ids.length);
+  assert.doesNotMatch(html, /id="shot-closed"/);
+});
+
+test('a baked shot opens as a full-viewport overlay on its fragment and closes in place', { skip: NO_BROWSER }, async () => {
+  const sheet = await bakeTemplate();
+  useBundledChromiumIfNeeded();
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ width: 390, height: 844, dsf: 1 });
+    await page.goto(toUrl(sheet), { settleMs: 0 });
+    const state = await page.eval(async () => {
+      const figure = document.getElementById('shot-2');
+      // A fragment link navigates in a task after the click, not during it.
+      const settle = (hash) => new Promise((done) => {
+        const poll = () => (location.hash === hash ? done() : setTimeout(poll, 10));
+        poll();
+      });
+      window.scrollTo(0, 300);
+      const before = scrollY;
+      figure.querySelector('.open').click();
+      await settle('#shot-2');
+      const open = getComputedStyle(figure).position;
+      const box = figure.getBoundingClientRect();
+      const closer = document.elementFromPoint(2, 842);
+      closer.closest('.close').click();
+      await settle('#shot-closed');
+      return { open, box: [box.width, box.height], closer: closer.closest('a')?.className,
+        closed: getComputedStyle(figure).position, before, after: scrollY };
+    });
+    assert.equal(state.open, 'fixed');
+    assert.deepEqual(state.box, [390, 844]);
+    assert.equal(state.closer, 'close');
+    assert.equal(state.closed, 'static');
+    assert.equal(state.after, state.before);
+  } finally {
+    await browser.close();
+  }
 });
 
 test('a shot path that leaves shots/ is refused, by .. or by a symlink', () => {

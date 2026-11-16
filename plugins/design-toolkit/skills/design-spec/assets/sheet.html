@@ -197,12 +197,18 @@
   .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .colhead { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
   figure { margin: 0; }
-  figure button { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; max-width: 100%; }
-  .viewer { max-width: none; max-height: none; width: 100%; height: 100%; margin: 0; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); border: 0; background: transparent; cursor: zoom-out; }
-  .viewer[open] { display: flex; align-items: center; justify-content: center; }
-  .viewer::backdrop { background: rgba(10, 10, 12, 0.85); }
-  .viewer img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+  .open { display: block; max-width: 100%; cursor: zoom-in; }
   figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .close { display: none; }
+  /* A shot opens as its own figure targeted by the URL fragment, so the viewer needs no script and no second
+     copy of the image. The close link fills the overlay's one grid cell above the image, so any click closes
+     it, and a wheel or a swipe still scrolls the overlay that holds it. */
+  figure:target { position: fixed; inset: 0; z-index: 10; display: grid; grid-template: minmax(100%, max-content) / minmax(100%, max-content); overflow: auto; overscroll-behavior: contain; background: rgba(10, 10, 12, 0.9); }
+  figure:target .open, figure:target .close { grid-area: 1 / 1; }
+  figure:target .open { place-self: center; max-width: none; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  figure:target img { max-width: none; border-color: transparent; }
+  figure:target .close { display: block; z-index: 1; cursor: zoom-out; color: #fff; text-decoration: none; }
+  .close span { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); padding: 6px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); font-size: 14px; font-weight: 600; }
   .none { font-size: 13px; color: var(--muted); padding: 16px; border: 1px dashed var(--line); border-radius: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -255,7 +261,6 @@
   }
 </style>
 <main id="sheet"></main>
-<dialog class="viewer" id="viewer" aria-label="Full-size shot"></dialog>
 <script>
   const data = JSON.parse(document.getElementById('sheet-data').textContent);
 
@@ -268,30 +273,26 @@
 
   // Shots are captured at 2x, so half the natural width shows them at true size and never upscales. A zoom
   // shows every captured pixel instead, capped at its column, so the changed element reads large.
+  // The artifact viewer blocks a link to a published file, so a shot opens full size in the page itself.
+  // Closing links to a fragment no element has, so the page keeps its scroll position.
+  let shotCount = 0;
   function shot(src, alt, zoomed) {
     if (!src) return el('div', 'none', 'Not captured');
     const figure = el('figure');
-    const link = el('button');
-    link.type = 'button';
-    link.onclick = () => openViewer(src, alt);
+    figure.id = `shot-${++shotCount}`;
+    const open = el('a', 'open');
+    open.href = `#${figure.id}`;
     const img = el('img');
     img.alt = alt;
     img.onload = () => { img.style.width = img.naturalWidth / (zoomed ? 1 : 2) + 'px'; };
     img.src = src;
-    link.append(img);
-    figure.append(link);
+    open.append(img);
+    const close = el('a', 'close');
+    close.href = '#shot-closed';
+    close.setAttribute('aria-label', 'Close the full-size shot');
+    close.append(el('span', '', 'Close'));
+    figure.append(open, close);
     return figure;
-  }
-
-  // The artifact viewer blocks a link to a published file, so a shot opens full size in the page itself.
-  const viewer = document.getElementById('viewer');
-  viewer.onclick = () => viewer.close();
-  function openViewer(src, alt) {
-    const img = el('img');
-    img.alt = alt;
-    img.src = src;
-    viewer.replaceChildren(img);
-    viewer.showModal();
   }
 
   function themePair(pair, label) {
