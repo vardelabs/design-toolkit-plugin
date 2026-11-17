@@ -397,7 +397,7 @@ test('zoom crops show every captured pixel, and context shots show half', { skip
   try {
     const page = await browser.newPage({ width: 1280, height: 800 });
     await page.goto(pathToFileURL(join(dir, 'sheet.html')).href, { timeoutMs: 5000, settleMs: 300 });
-    const sizes = await page.eval(() => Promise.all([...document.images].map((i) => i.decode().then(() => i))).then((imgs) => imgs.map((i) => [i.closest('.zoom') ? 'zoom' : 'context', i.style.width, i.naturalWidth])));
+    const sizes = await page.eval(() => Promise.all([...document.images].map((i) => i.decode().then(() => i))).then((imgs) => imgs.map((i) => [i.closest('.zoom') ? 'zoom' : 'context', i.style.getPropertyValue('--page-width'), i.naturalWidth])));
     for (const [kind, width, natural] of sizes) assert.equal(width, `${kind === 'zoom' ? natural : natural / 2}px`, kind);
     const looks = await page.eval(() => [...document.querySelectorAll('.look b')].length);
     assert.equal(looks, 2);
@@ -406,7 +406,7 @@ test('zoom crops show every captured pixel, and context shots show half', { skip
   }
 });
 
-test('clicking a shot opens that same image uncapped over the page, and a click anywhere closes it', { skip: NO_CHROME }, async () => {
+test('clicking a shot opens that same image larger over the page, and a click anywhere closes it', { skip: NO_CHROME }, async () => {
   const dir = workdir();
   const pair = sampleShots(dir);
   fillTemplate(dir, 'sheet.html', 'sheet-data', { ...sheetData(), zooms: [], beforeAfter: [{ label: 'Box', lookFor: 'The box.', before: pair, after: pair }], states: [] });
@@ -422,15 +422,16 @@ test('clicking a shot opens that same image uncapped over the page, and a click 
       });
       const figure = document.querySelector('figure');
       const img = figure.querySelector('img');
+      const onPage = img.getBoundingClientRect().width;
       figure.querySelector('.open').click();
       await arrive(`#${figure.id}`);
-      const opened = { position: getComputedStyle(figure).position, width: img.getBoundingClientRect().width, trueWidth: parseFloat(img.style.width) };
+      const opened = { position: getComputedStyle(figure).position, width: img.getBoundingClientRect().width, onPage };
       document.elementFromPoint(2, 798).click();
       await arrive('#shot-closed');
       return { ...opened, closed: getComputedStyle(figure).position };
     });
     assert.equal(result.position, 'fixed');
-    assert.equal(result.width, result.trueWidth);
+    assert.ok(result.width > result.onPage, `opened at ${result.width}px, on the page ${result.onPage}px`);
     assert.equal(result.closed, 'static');
   } finally {
     await browser.close();
