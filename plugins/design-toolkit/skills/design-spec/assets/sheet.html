@@ -204,14 +204,17 @@
      copy of the image. The close link fills the overlay's one grid cell above the image, so any click closes
      it, and a wheel or a swipe still scrolls the overlay that holds it. The cell is at least the overlay's size
      and grows to fit the shot, so a shot wider than the screen scrolls into view from its left edge. */
-  figure:target { position: fixed; inset: 0; z-index: 10; display: grid; grid-template: minmax(max-content, 100%) / minmax(max-content, 100%); overflow: auto; overscroll-behavior: contain; background: rgba(10, 10, 12, 0.9); }
+  figure:target { position: fixed; inset: 0; z-index: 10; container-type: inline-size; display: grid; grid-template: minmax(max-content, 100%) / minmax(max-content, 100%); overflow: auto; overscroll-behavior: contain; background: rgba(10, 10, 12, 0.9); }
   figure:target .open, figure:target .close { grid-area: 1 / 1; }
   figure:target .open { place-self: center; max-width: none; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-  /* An opened shot fills the viewport when it can, but never shows smaller than on the page and never past
-     one CSS px per captured pixel, so it is always larger than the card and the overlay scrolls the rest. */
-  figure:target img { width: clamp(var(--page-width), calc(100vw - 32px), var(--full-width)); max-width: none; border-color: transparent; }
-  figure:target .close { display: block; z-index: 1; cursor: zoom-out; color: #fff; text-decoration: none; }
-  .close span { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); padding: 6px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); font-size: 14px; font-weight: 600; }
+  /* An opened shot fills the overlay when it can, but never shows smaller than on the page and never past
+     one CSS px per captured pixel, so it is always larger than the card and the overlay scrolls the rest.
+     The overlay is its own size container, so its scrollbar narrows the fill instead of overflowing it. */
+  figure:target img { width: clamp(var(--page-width), calc(100cqw - 32px), var(--full-width)); max-width: none; border-color: transparent; }
+  figure:target .close { display: flex; justify-content: flex-end; align-items: flex-start; z-index: 1; cursor: zoom-out; color: #fff; text-decoration: none; }
+  /* Sticky, not fixed: Chromium stops hit-testing the whole overlay when a fixed box sits inside a size
+     container, and then no click closes it. */
+  .close span { position: sticky; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); margin: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 0 0; padding: 6px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); font-size: 14px; font-weight: 600; }
   .none { font-size: 13px; color: var(--muted); padding: 16px; border: 1px dashed var(--line); border-radius: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }

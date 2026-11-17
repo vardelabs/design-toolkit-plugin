@@ -206,12 +206,15 @@ test('a baked shot opens as a full-viewport overlay on its fragment and closes i
 const SHOT_WIDTH = 1200;
 
 // Opens one plain shot and one zoom shot in turn and returns each one's width on the page and when opened.
-async function shotWidths(sheet, viewportWidth) {
+// The capture browser runs with hidden scrollbars, so a scrollbar is stood in for by padding of the same width
+// on the overlay: both narrow the overlay's content box and leave the viewport width as it was.
+async function shotWidths(sheet, viewportWidth, scrollbarWidth = 0) {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage({ width: viewportWidth, height: 800, dsf: 1 });
     await page.goto(toUrl(sheet), { settleMs: 0 });
-    return await page.eval(async () => {
+    return await page.eval(async (scrollbarWidth) => {
+      document.head.append(Object.assign(document.createElement('style'), { textContent: `figure:target { padding-right: ${scrollbarWidth}px; }` }));
       const settle = (hash) => new Promise((done) => {
         const poll = () => (location.hash === hash ? done() : setTimeout(poll, 10));
         poll();
@@ -232,7 +235,7 @@ async function shotWidths(sheet, viewportWidth) {
         plain: await measure(document.querySelector('.themes figure')),
         zoom: await measure(document.querySelector('.zoom figure')),
       };
-    });
+    }, scrollbarWidth);
   } finally {
     await browser.close();
   }
@@ -256,6 +259,42 @@ test('an opened shot shows larger than on the page, up to one CSS px per capture
   const between = await shotWidths(sheet, 1000);
   assert.equal(between.plain.opened, 1000 - 32, 'a shot wider than the screen opens at the screen width');
   assert.equal(between.plain.scrolls, false, 'a shot that fits the screen does not scroll sideways');
+
+  const scrollbar = 15;
+  const besideScrollbar = await shotWidths(sheet, 1000, scrollbar);
+  assert.equal(besideScrollbar.plain.opened, 1000 - scrollbar - 32, 'the opened shot fills the overlay beside its scrollbar');
+  assert.equal(besideScrollbar.plain.scrolls, false, 'a scrollbar does not push the opened shot into a sideways scroll');
+});
+
+test('the close label stays in the top right corner while the opened shot scrolls both ways', { skip: NO_BROWSER }, async () => {
+  const sheet = await bakeTemplate(greyPng(SHOT_WIDTH, 2000));
+  useBundledChromiumIfNeeded();
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ width: 390, height: 800, dsf: 1 });
+    await page.goto(toUrl(sheet), { settleMs: 0 });
+    const corners = await page.eval(async () => {
+      const figure = document.querySelector('.themes figure');
+      figure.querySelector('.open').click();
+      await new Promise((done) => {
+        const poll = () => (location.hash === `#${figure.id}` ? done() : setTimeout(poll, 10));
+        poll();
+      });
+      const label = figure.querySelector('.close span');
+      const corner = () => {
+        const box = label.getBoundingClientRect();
+        return [innerWidth - box.right, box.top];
+      };
+      const start = corner();
+      figure.scrollTo(figure.scrollWidth, figure.scrollHeight);
+      return { start, scrolled: corner(), moved: figure.scrollLeft > 0 && figure.scrollTop > 0 };
+    });
+    assert.ok(corners.moved, 'the opened shot scrolls both ways');
+    assert.deepEqual(corners.start, [12, 12]);
+    assert.deepEqual(corners.scrolled, [12, 12]);
+  } finally {
+    await browser.close();
+  }
 });
 
 test('an opened shot wider than the screen can be scrolled to every edge, and a click on any part of it closes it', { skip: NO_BROWSER }, async () => {
