@@ -136,7 +136,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 
    `--card` holds the card to a height a chat app can show inline: at most twice its width, and never over 3000 px. The 2400 px wide card stops at 3000 px. A taller card is refused, no file is written, and the material becomes the full sheet (Step 4). Never split a refused card into several images.
 
-4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). Pass no `display: "render"` to `SendUserFile`, since that opens a side pane the reviewer did not ask for. Never open the card image in a browser: a browser is for published sheets only. It is 2x: 2400 pixels wide.
+4. Send `card-1300x900-light.png`, and only that file, inline (`SendUserFile` on the desktop, or an attachment in a chat channel). Pass no `display: "render"` to `SendUserFile`, since that opens a side pane the reviewer did not ask for. Never open the card image in a browser: a browser is for published sheets only. It is 2x: 2400 pixels wide. Then post it on the PR (Put the Spec on the PR).
 
 ## Step 4: Build the Full Sheet
 
@@ -223,6 +223,15 @@ Read `references/critique.md` and check the rendered card or sheet against it. J
 - Nothing claims a check that did not run. If a state could only be captured in the browser pane, or a fixture stood in for the server, the material says so.
 
 Fix what fails, re-render, and check again. Then send it.
+
+## Put the Spec on the PR
+
+A UI PR carries its design spec on the PR. Send the material where the reviewer reads it, and also post it as a PR comment, each round. Mention no one in the comment.
+
+- **Quick card.** `gh` cannot attach an image to a comment. Commit the card PNG to an orphan `design-specs` branch in the PR's repo, at `pr-<n>/card.png`, one folder per PR. That branch never merges. Embed the image by its commit-pinned blob URL, `https://github.com/<owner>/<repo>/blob/<sha>/pr-<n>/card.png?raw=true`, so a later round never changes an earlier comment. The image has the repo's access, so a private repo's card stays private. On a public repo, the branch and the comment publish the card to everyone, and a pinned commit stays reachable after a force-push. There, post the image only when every state in it uses a fixture. Otherwise post the comment without the image. Before you post, check that the file is at that commit: `gh api "repos/<owner>/<repo>/contents/pr-<n>/card.png?ref=<sha>"`.
+- **Full sheet.** The comment links the sheet's Artifact URL, the same URL as in the PR body.
+
+The comment names the before and after commits and says when the data is made up.
 
 ## Files
 
