@@ -6,14 +6,15 @@ import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { sleep } from '../../design-spec/scripts/lib/cdp.mjs';
 import { launchBrowser, useBundledChromiumIfNeeded } from '../../design-spec/scripts/lib/launch-browser.mjs';
-import { parseTheme, parseViewport, preparePage, toUrl } from '../../design-spec/scripts/lib/page.mjs';
+import { detectColorModes, planColorModes } from '../../design-spec/scripts/lib/color-modes.mjs';
+import { openPage, parseTheme, parseViewport, preparePage, toUrl } from '../../design-spec/scripts/lib/page.mjs';
 import { alignment } from './lib/align.mjs';
 import { frame, probe } from './lib/probe.mjs';
 import { RULE_IDS, judge, merge } from './lib/rules.mjs';
 
 const USAGE = `usage: node inspect.mjs --url <url|file>
   [--viewport desktop|narrow|WIDTHxHEIGHT]... [--theme light|dark]...
-  [--theme-attr name] [--cookies file.json] [--wait-for css] [--settle ms] [--blur]
+  [--theme-toggle css]... [--cookies file.json] [--wait-for css] [--settle ms] [--blur]
   [--screens n] [--allow rule]... [--ignore css]... [--config file] [--json]
 rules: ${RULE_IDS.join(', ')}`;
 
@@ -55,8 +56,8 @@ function readOptions(argv) {
     options: {
       url: { type: 'string' },
       viewport: { type: 'string', multiple: true, default: ['desktop', 'narrow'] },
-      theme: { type: 'string', multiple: true, default: ['light', 'dark'] },
-      'theme-attr': { type: 'string' },
+      theme: { type: 'string', multiple: true },
+      'theme-toggle': { type: 'string', multiple: true, default: [] },
       cookies: { type: 'string' },
       'wait-for': { type: 'string' },
       settle: { type: 'string', default: '300' },
@@ -77,8 +78,8 @@ function readOptions(argv) {
     target: values.url,
     url: toUrl(values.url),
     viewports: values.viewport.map(parseViewport),
-    themes: values.theme.map(parseTheme),
-    themeAttr: values['theme-attr'],
+    themes: values.theme?.map(parseTheme) ?? null,
+    themeToggles: values['theme-toggle'],
     cookies: values.cookies ? JSON.parse(readFileSync(values.cookies, 'utf8')) : null,
     waitFor: values['wait-for'],
     settleMs: count('settle', values.settle),
@@ -109,11 +110,11 @@ async function framesFor(page, height, maxScreens, ignore) {
   return frames;
 }
 
-async function inspect(browser, opts, viewport, theme) {
+async function inspect(browser, opts, viewport, theme, look) {
   // 2x, as design-spec shoots: optical-align reads the ink, which snaps to the device pixel grid.
-  const page = await browser.newPage({ width: viewport.width, height: viewport.height, dsf: 2 });
+  const page = await openPage(browser, { width: viewport.width, height: viewport.height, dsf: 2 });
   try {
-    await preparePage(page, opts, theme);
+    await preparePage(page, opts, look);
     const measured = await page.eval(probe, opts.ignore);
     const frames = await framesFor(page, viewport.height, opts.screens, opts.ignore);
     const metrics = { ...measured, alignment: await alignment(page, { ignore: opts.ignore, exceptions: opts.exceptions }) };
@@ -129,6 +130,7 @@ function printReport(report) {
   const warns = report.findings.filter((f) => f.level === 'WARN');
   console.log(`UI INSPECT  ${report.url}`);
   if (report.config) console.log(`config: ${report.config}`);
+  console.log(`${report.colorModes.note} ${report.colorModes.detail}`);
   console.log(`ran: ${report.ran.join(', ')}${report.allow.length ? `   allowed: ${report.allow.join(', ')}` : ''}${report.ignore.length ? `   ignored: ${report.ignore.join(', ')}` : ''}`);
   for (const f of report.findings) {
     console.log(`\n${f.level} [${f.id}] at ${f.where.join(', ')}\n  ${f.message}\n  fix: ${f.fix}`);
@@ -146,17 +148,22 @@ async function main() {
   const browser = await launchBrowser();
   const found = [];
   const ran = [];
+  let colorModes;
   try {
+    const detected = await detectColorModes(browser, opts, opts.viewports[0]);
+    const plan = planColorModes(opts.themes, detected);
+    colorModes = plan.report;
+    const { themes } = plan;
     for (const viewport of opts.viewports) {
-      for (const theme of opts.themes) {
-        found.push(...await inspect(browser, opts, viewport, theme));
+      for (const theme of themes) {
+        found.push(...await inspect(browser, opts, viewport, theme, detected.looks[theme]));
         ran.push(`${viewport.name}/${theme}`);
       }
     }
   } finally {
     await browser.close();
   }
-  const report = { url: opts.target, config: opts.config, ran, allow: opts.allow, ignore: opts.ignored, findings: merge(found) };
+  const report = { url: opts.target, config: opts.config, colorModes, ran, allow: opts.allow, ignore: opts.ignored, findings: merge(found) };
   if (opts.json) console.log(JSON.stringify(report, null, 2));
   else printReport(report);
   return report.findings.some((f) => f.level === 'FAIL') ? 1 : 0;

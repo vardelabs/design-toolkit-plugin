@@ -1,6 +1,6 @@
 ---
 name: ui-inspect
-description: Measures an app screen in a real headless browser and reports what a reviewer would only catch by eye if a screenshot happened to show it. It checks sideways overflow, text cut off by its box, text covered by another element, low contrast, a font that fell back, broken images, text under 12px, too many type sizes or typefaces, an overlong line, rows that scroll sideways, icons that sit off the middle of the text beside them, and icon-only buttons that sit off the middle of the controls beside them. It runs at the design-spec viewports in light and dark, and gives each FAIL and WARN a fix. Use before capturing review material for a UI change, after building or changing an app screen, or on "inspect this screen", "check the UI for overflow", "is anything clipped". Do NOT use for marketing-page art direction, or as a substitute for looking at the shots.
+description: Measures an app screen in a real headless browser and reports what a reviewer would only catch by eye if a screenshot happened to show it. It checks sideways overflow, text cut off by its box, text covered by another element, low contrast, a font that fell back, broken images, text under 12px, too many type sizes or typefaces, an overlong line, rows that scroll sideways, icons that sit off the middle of the text beside them, and icon-only buttons that sit off the middle of the controls beside them. It runs at the design-spec viewports in each colour mode the app ships, and gives each FAIL and WARN a fix. Use before capturing review material for a UI change, after building or changing an app screen, or on "inspect this screen", "check the UI for overflow", "is anything clipped". Do NOT use for marketing-page art direction, or as a substitute for looking at the shots.
 ---
 
 # UI Inspect
@@ -20,8 +20,8 @@ It needs Node 22 or later and finds a browser the same way `design-spec` does.
 | Option | Default | Use |
 |---|---|---|
 | `--viewport` | `desktop` and `narrow` | `desktop` (1280x800), `narrow` (400x800), or `WIDTHxHEIGHT`. Repeat for several. |
-| `--theme` | `light` and `dark` | Repeat to pick. |
-| `--theme-attr` | none | Also set this attribute on `<html>` to `light` or `dark`, for apps whose theme attribute overrides `prefers-color-scheme`. |
+| `--theme` | each mode the app ships | `light` or `dark`. Repeat to pick. A mode the app does not ship fails. |
+| `--theme-toggle` | none | The app's own theme control, clicked to reach its other mode. Repeat it for a control inside a menu. |
 | `--cookies` | none | Path to a JSON file holding an array of CDP cookie objects, for a page behind a sign-in. |
 | `--wait-for` | none | A selector that must exist before the checks run. |
 | `--settle` | `300` | Milliseconds to wait after load. |
@@ -32,7 +32,7 @@ It needs Node 22 or later and finds a browser the same way `design-spec` does.
 | `--config` | `.design-toolkit.json` in the working folder or the nearest folder above it | The repo's design config. See Repo Config. |
 | `--json` | off | Print the report as JSON, the shape the design-spec sheet takes as `checks`. A rule that fires with different evidence at two viewports or themes is two findings. |
 
-Use the same `--viewport`, `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, and `--blur` as the capture, so each fixture state is checked as it is shot.
+Use the same `--viewport`, `--theme-toggle`, `--cookies`, `--wait-for`, `--settle`, and `--blur` as the capture, so each fixture state is checked as it is shot. The modes come from the same check `capture.mjs` runs, and the report's `colorModes` line names them.
 
 Each finding names its elements by a short class path, such as `"python" (div.code-head > span)`, and in JSON lists them under `selectors`, ready to pass to `--ignore`.
 

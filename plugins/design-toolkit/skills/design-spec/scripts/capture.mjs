@@ -5,7 +5,8 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { cardTooTallMessage } from './lib/card-limit.mjs';
 import { launchBrowser, useBundledChromiumIfNeeded } from './lib/launch-browser.mjs';
-import { parseTheme, parseViewport, preparePage, toUrl } from './lib/page.mjs';
+import { detectColorModes, planColorModes } from './lib/color-modes.mjs';
+import { openPage, parseTheme, parseViewport, preparePage, toUrl } from './lib/page.mjs';
 
 const SCALES = [2, 4];
 const EDGES = ['top', 'middle', 'bottom'];
@@ -13,7 +14,7 @@ const GUIDE_COLOUR = '#00aaff';
 
 const USAGE = `usage: node capture.mjs --url <url|file> [--out dir] [--name base]
   [--viewport desktop|narrow|WIDTHxHEIGHT]... [--theme light|dark]...
-  [--selector css]... [--margin px] [--theme-attr name] [--cookies file.json]
+  [--selector css]... [--margin px] [--theme-toggle css]... [--cookies file.json]
   [--wait-for css] [--settle ms] [--blur] [--full-page] [--card]
   [--scale 2|4] [--guide css[:top|middle|bottom]]...`;
 
@@ -25,10 +26,10 @@ function readOptions(argv) {
       out: { type: 'string', default: '.' },
       name: { type: 'string', default: 'shot' },
       viewport: { type: 'string', multiple: true, default: ['desktop'] },
-      theme: { type: 'string', multiple: true, default: ['light', 'dark'] },
+      theme: { type: 'string', multiple: true },
       selector: { type: 'string', multiple: true, default: [] },
       margin: { type: 'string', default: '96' },
-      'theme-attr': { type: 'string' },
+      'theme-toggle': { type: 'string', multiple: true, default: [] },
       cookies: { type: 'string' },
       'wait-for': { type: 'string' },
       settle: { type: 'string', default: '300' },
@@ -48,14 +49,14 @@ function readOptions(argv) {
     out: resolve(values.out),
     name: values.name,
     viewports: values.viewport.map(parseViewport),
-    themes: values.theme.map(parseTheme),
+    themes: values.theme?.map(parseTheme) ?? null,
     selectors: values.selector,
     fullPage: values['full-page'],
     card: values.card,
     scale,
     guides: values.guide.map(parseGuide),
     margin: Number(values.margin),
-    themeAttr: values['theme-attr'],
+    themeToggles: values['theme-toggle'],
     cookies: values.cookies ? JSON.parse(readFileSync(values.cookies, 'utf8')) : null,
     waitFor: values['wait-for'],
     settleMs: Number(values.settle),
@@ -132,10 +133,10 @@ function refuseTallCard(clip, viewport, scale) {
   if (tooTall) throw new Error(tooTall);
 }
 
-async function shoot(browser, opts, viewport, theme) {
-  const page = await browser.newPage({ width: viewport.width, height: viewport.height, dsf: opts.scale });
+async function shoot(browser, opts, viewport, theme, look, colorModes) {
+  const page = await openPage(browser, { width: viewport.width, height: viewport.height, dsf: opts.scale });
   try {
-    await preparePage(page, opts, theme);
+    await preparePage(page, opts, look);
     const clip = opts.selectors.length ? await clipFor(page, opts.selectors, opts.margin) : opts.fullPage ? await fullPageClip(page) : null;
     if (opts.card) refuseTallCard(clip, viewport, opts.scale);
     const guides = await drawGuides(page, opts.guides, opts.scale);
@@ -144,7 +145,7 @@ async function shoot(browser, opts, viewport, theme) {
     const file = join(opts.out, `${opts.name}-${viewport.name}-${theme}.png`);
     writeFileSync(file, Buffer.from(data, 'base64'));
     const brokenImages = await page.eval(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src')));
-    return { file, viewport: viewport.name, theme, scale: opts.scale, clip, guides, brokenImages, pageErrors: page.consoleErrors };
+    return { file, viewport: viewport.name, theme, scale: opts.scale, clip, guides, brokenImages, pageErrors: page.consoleErrors, colorModes };
   } finally {
     await page.close();
   }
@@ -160,9 +161,12 @@ async function main() {
   useBundledChromiumIfNeeded();
   const browser = await launchBrowser();
   try {
+    const detected = await detectColorModes(browser, opts, opts.viewports[0]);
+    const { themes, report } = planColorModes(opts.themes, detected);
+    console.error(`capture: ${report.note} ${report.detail}`);
     const results = [];
     for (const viewport of opts.viewports) {
-      for (const theme of opts.themes) results.push(await shoot(browser, opts, viewport, theme));
+      for (const theme of themes) results.push(await shoot(browser, opts, viewport, theme, detected.looks[theme], report));
     }
     console.log(JSON.stringify(results, null, 2));
   } finally {

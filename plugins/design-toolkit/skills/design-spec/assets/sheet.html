@@ -22,6 +22,7 @@
   "summary": "Adds an attach button to the composer. It opens the file picker, shows the file count, and reports upload errors inline.",
   "viewport": "1280x800 and 400x800, at 2x",
   "source": "before: main @ 1a2b3c4, after: feat/attach @ 5d6e7f8",
+  "colorModes": { "modes": ["light", "dark"], "note": "Dark mode: follows the system setting, captured light and dark." },
   "beforeLabel": "Before (main @ 1a2b3c4)",
   "afterLabel": "After (feat/attach @ 5d6e7f8)",
   "captured": "2026-10-16 14:02",
@@ -269,6 +270,8 @@
 <main id="sheet"></main>
 <script>
   const data = JSON.parse(document.getElementById('sheet-data').textContent);
+  // Only the modes the app ships: capture.mjs reports them, and a light-only app gets no empty dark column.
+  const THEMES = data.colorModes ? data.colorModes.modes : ['light', 'dark'];
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -306,7 +309,7 @@
 
   function themePair(pair, label) {
     const grid = el('div', 'themes');
-    for (const theme of ['light', 'dark']) {
+    for (const theme of THEMES) {
       const col = el('div');
       col.append(el('div', 'colhead', theme === 'light' ? 'Light' : 'Dark'), shot(pair && pair[theme], `${label}, ${theme}`));
       grid.append(col);
@@ -461,7 +464,7 @@
     const blocks = data.zooms.map((z) => {
       const wrap = el('div', 'zoom');
       const grid = el('div', 'zoom-grid');
-      for (const theme of ['light', 'dark']) {
+      for (const theme of THEMES) {
         for (const [name, heading] of columns) {
           const cellNode = el('div');
           const shots = z[name];
@@ -480,7 +483,7 @@
       const wrap = el('div');
       const grid = el('div', 'pair');
       grid.append(el('div'), el('div', 'colhead', data.beforeLabel || 'Before (main)'), el('div', 'colhead', data.afterLabel || 'After (this branch)'));
-      for (const theme of ['light', 'dark']) {
+      for (const theme of THEMES) {
         grid.append(el('div', 'colhead', theme === 'light' ? 'Light' : 'Dark'));
         for (const [name, shots] of [['before', item.before], ['after', item.after]]) {
           grid.append(shots ? shot(shots[theme], `${item.label}, ${name}, ${theme}`) : el('div', 'none', 'New screen: no before state'));
@@ -498,7 +501,6 @@
   // the reviewer can hover and press it, then frozen once per state, so the states read side by side and a
   // headless capture can shoot them. Each item's CSS is nested under its own block so items cannot clash.
   const STATE_CLASS = { hover: 'is-hover', press: 'is-press', focus: 'is-focus' };
-  const THEMES = ['light', 'dark'];
 
   function stage(item, theme, live) {
     const box = el('div', `stage ${theme}${live ? ' live' : ''}`);
@@ -647,7 +649,7 @@
     if ((data.interactions || []).length) sheet.append(interactionsSection());
     if ((data.notInScope || []).length) sheet.append(section('Not in This PR', list(data.notInScope)));
     sheet.append(section('Open Questions', list(data.questions, true)));
-    sheet.append(el('p', 'footnote', `Captured ${data.captured} at ${data.viewport}. ${data.source}.`));
+    sheet.append(el('p', 'footnote', `Captured ${data.captured} at ${data.viewport}. ${data.source}.${data.colorModes ? ` ${data.colorModes.note}` : ''}`));
   }
 
   render();

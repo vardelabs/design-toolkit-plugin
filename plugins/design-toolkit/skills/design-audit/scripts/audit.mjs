@@ -23,11 +23,11 @@ const MEASURED_AREA = {
   contrast: 'colour', 'broken-image': 'imagery',
   'font-fallback': 'type', 'font-count': 'type', 'size-count': 'type', 'small-text': 'type', measure: 'type',
 };
-const PAGE_OPTIONS = ['theme-attr', 'cookies', 'wait-for', 'settle'];
+const PAGE_OPTIONS = ['cookies', 'wait-for', 'settle'];
 
 const USAGE = `usage: node audit.mjs --url <url|file> [--src dir]... [--mode app|site] [--out dir]
   [--viewport desktop|narrow|WIDTHxHEIGHT]... [--theme light|dark]...
-  [--theme-attr name] [--cookies file.json] [--wait-for css] [--settle ms] [--blur] [--ignore css]...`;
+  [--theme-toggle css]... [--cookies file.json] [--wait-for css] [--settle ms] [--blur] [--ignore css]...`;
 
 function readOptions(argv) {
   const { values } = parseArgs({
@@ -36,8 +36,8 @@ function readOptions(argv) {
       url: { type: 'string' }, src: { type: 'string', multiple: true, default: [] },
       mode: { type: 'string', default: 'app' }, out: { type: 'string' },
       viewport: { type: 'string', multiple: true, default: ['desktop', 'narrow'] },
-      theme: { type: 'string', multiple: true, default: ['light', 'dark'] },
-      'theme-attr': { type: 'string' }, cookies: { type: 'string' }, 'wait-for': { type: 'string' }, settle: { type: 'string' },
+      theme: { type: 'string', multiple: true, default: [] }, 'theme-toggle': { type: 'string', multiple: true, default: [] },
+      cookies: { type: 'string' }, 'wait-for': { type: 'string' }, settle: { type: 'string' },
       blur: { type: 'boolean', default: false }, ignore: { type: 'string', multiple: true, default: [] },
       help: { type: 'boolean', default: false },
     },
@@ -52,6 +52,7 @@ function pageArgs(opts) {
   const args = ['--url', opts.url];
   for (const v of opts.viewport) args.push('--viewport', v);
   for (const t of opts.theme) args.push('--theme', t);
+  for (const sel of opts['theme-toggle']) args.push('--theme-toggle', sel);
   for (const name of PAGE_OPTIONS) if (opts[name] !== undefined) args.push(`--${name}`, opts[name]);
   if (opts.blur) args.push('--blur');
   return args;
@@ -62,7 +63,8 @@ function capture(opts) {
   mkdirSync(out, { recursive: true });
   const args = [CAPTURE, ...pageArgs(opts), '--out', out, '--name', 'page', '--full-page'];
   const shots = JSON.parse(execFileSync(process.execPath, args, { encoding: 'utf8', maxBuffer: 1 << 24 }));
-  return shots.map((s) => ({ where: `${s.viewport}/${s.theme}`, viewport: s.viewport, theme: s.theme, file: relative(opts.out, s.file).split('\\').join('/'), pageErrors: s.pageErrors }));
+  const { colorModes } = shots[0];
+  return { colorModes, shots: shots.map((s) => ({ where: `${s.viewport}/${s.theme}`, viewport: s.viewport, theme: s.theme, file: relative(opts.out, s.file).split('\\').join('/'), pageErrors: s.pageErrors })) };
 }
 
 function inspect(opts) {
@@ -109,7 +111,7 @@ export function order(findings) {
   return [...findings].sort((a, b) => rank(a) - rank(b));
 }
 
-function cardData(opts, shots, findings, scan) {
+function cardData(opts, { shots, colorModes }, findings, scan) {
   const fails = findings.filter((f) => f.level === 'FAIL').length;
   const scanned = scan ? ` Source scan: ${scan.files} file(s)${scan.skipped.length ? `, ${scan.skipped.length} skipped as too large` : ''}.` : ' No source was scanned.';
   const screens = [...new Set(shots.map((s) => s.viewport))].map((viewport) => ({
@@ -120,7 +122,7 @@ function cardData(opts, shots, findings, scan) {
     ref: opts.url, status: `Design audit, ${opts.mode} mode`, title: 'Design Audit',
     summary: `${findings.length} findings so far (${fails} FAIL).${scanned} Add what the shots show, then fill the card.`,
     viewport: opts.viewport.join(' and '), source: 'Current state, no change applied', afterLabel: 'Current',
-    captured: new Date().toISOString().slice(0, 16).replace('T', ' '), screens,
+    captured: new Date().toISOString().slice(0, 16).replace('T', ' '), colorModes, screens,
     findings: findings.map((f) => ({ level: f.level, area: f.area, id: f.id, text: f.text, fix: f.fix || '', where: f.places ? f.places.slice(0, 3).join('; ') + (f.places.length > 3 ? `; and ${f.places.length - 3} more` : '') : f.where.join(', ') })),
   };
 }
@@ -129,14 +131,15 @@ function main(argv) {
   const opts = readOptions(argv);
   if (!opts) { console.log(USAGE); return 0; }
   mkdirSync(opts.out, { recursive: true });
-  const shots = capture(opts);
+  const taken = capture(opts);
+  const { shots, colorModes } = taken;
   const shotsByWhere = new Map(shots.map((s) => [s.where, s.file]));
   const measured = measuredFindings(inspect(opts), shotsByWhere);
   const report = opts.src.length ? lint(opts.src, { mode: opts.mode }) : null;
   const scan = report && { files: report.files, skipped: report.skipped };
   const findings = order([...measured, ...pageErrorFindings(shots), ...(report ? sourceFindings(report) : [])]);
-  writeFileSync(join(opts.out, 'audit.json'), JSON.stringify({ url: opts.url, mode: opts.mode, src: opts.src, scan, shots: shots.map(({ pageErrors, ...s }) => s), findings }, null, 2));
-  writeFileSync(join(opts.out, 'card.json'), JSON.stringify(cardData(opts, shots, findings, scan), null, 2));
+  writeFileSync(join(opts.out, 'audit.json'), JSON.stringify({ url: opts.url, mode: opts.mode, src: opts.src, scan, colorModes, shots: shots.map(({ pageErrors, ...s }) => s), findings }, null, 2));
+  writeFileSync(join(opts.out, 'card.json'), JSON.stringify(cardData(opts, taken, findings, scan), null, 2));
   console.log(JSON.stringify({ out: opts.out, shots: shots.length, findings: findings.length, fails: findings.filter((f) => f.level === 'FAIL').length }));
   return 0;
 }

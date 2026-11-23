@@ -1,6 +1,6 @@
 ---
 name: design-spec
-description: Makes the review material for a UI change, the way a product design team would. A quick card (one composed image, inline in chat) for a small change, or a full sheet (a private claude.ai Artifact, republished to one URL each round) for a build with states the reviewer cannot reach in the dev preview. Starts from a state inventory checked against the code and the server contract, captures with a headless script at fixed viewports, 2x, light and dark, and checks the material before it goes out. Use when you are about to send screenshots of a UI change, when a reviewer asks to see a UI change or its states, when a PR changes what a screen looks like or does, or on "show me the UI", "send screenshots", "design review", "before and after". Do NOT use for marketing-page art direction or for a non-visual change.
+description: Makes the review material for a UI change, the way a product design team would. A quick card (one composed image, inline in chat) for a small change, or a full sheet (a private claude.ai Artifact, republished to one URL each round) for a build with states the reviewer cannot reach in the dev preview. Starts from a state inventory checked against the code and the server contract, captures with a headless script at fixed viewports, 2x, in each colour mode the app ships, and checks the material before it goes out. Use when you are about to send screenshots of a UI change, when a reviewer asks to see a UI change or its states, when a PR changes what a screen looks like or does, or on "show me the UI", "send screenshots", "design review", "before and after". Do NOT use for marketing-page art direction or for a non-visual change.
 ---
 
 **Version:** 0.3.0 -- see git history for changes.
@@ -43,7 +43,7 @@ Label each state **Real server** or **Fixture: <what>**. Fixtures use synthetic 
 
 ## Step 2: Capture
 
-First run `design-toolkit:ui-inspect` on each screen and fixture state, with the same `--viewport`, `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, and `--blur` you will capture with, from inside the app's repo so it reads the repo's `.design-toolkit.json`. Fix every FAIL before you capture; a shot of a broken screen goes back for another round. Keep each `--json` report for the full sheet.
+First run `design-toolkit:ui-inspect` on each screen and fixture state, with the same `--viewport`, `--theme-toggle`, `--cookies`, `--wait-for`, `--settle`, and `--blur` you will capture with, from inside the app's repo so it reads the repo's `.design-toolkit.json`. Fix every FAIL before you capture; a shot of a broken screen goes back for another round. Keep each `--json` report for the full sheet.
 
 Use `scripts/capture.mjs`. It drives Chrome headless (Node 22+, no npm install), so every shot is a fresh paint of the final layout. It looks for `CHROME_PATH`, then an installed Chrome, Edge, or Chromium, then a Chromium that Playwright downloaded (`PLAYWRIGHT_BROWSERS_PATH`, `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright`, or `%LOCALAPPDATA%\ms-playwright`).
 
@@ -54,9 +54,9 @@ node <skill>/scripts/capture.mjs --url http://localhost:5173/composer --out <scr
 | Option | Default | Use |
 |---|---|---|
 | `--viewport` | `desktop` | `desktop` (1280x800), `narrow` (400x800), or `WIDTHxHEIGHT`. Repeat for several. |
-| `--theme` | `light` and `dark` | Repeat to pick. Each theme is a separate shot. |
+| `--theme` | each mode the app ships | `light` or `dark`. Repeat to pick. Each theme is a separate shot. A mode the app does not ship fails. |
 | `--selector` | whole viewport | Crop to this element plus `--margin` (default 96px). Repeat it to crop to the union of several elements, for example a dialog and a menu that opens past its edge. |
-| `--theme-attr` | none | Also set this attribute on `<html>` to `light` or `dark`, for apps whose theme attribute overrides `prefers-color-scheme`. |
+| `--theme-toggle` | none | The app's own theme control, clicked to reach its other mode, for an app whose dark mode is a setting it saves rather than the system setting. Repeat it for a control inside a menu: each is clicked in order. |
 | `--cookies` | none | Path to a JSON file holding an array of CDP cookie objects, for a page behind a sign-in. |
 | `--wait-for` | none | A selector that must exist before the shot. |
 | `--settle` | `300` | Milliseconds to wait after load. |
@@ -70,7 +70,8 @@ It writes `<name>-<viewport>-<theme>.png` at 2x, or at `--scale`, and prints JSO
 The capture rules:
 
 - **Fixed viewports.** Before and after use the same viewport and the same crop.
-- **Both themes** for every state. Check that the dark shot is really dark. If it is not, the app sets its theme another way: use `--theme-attr`.
+- **Only the colour modes the app ships.** Before it shoots, `capture.mjs` loads the page with light and then dark requested. Dark counts only when the page renders dark once dark is requested, or when the app's own control (`--theme-toggle`) switches it. A theme attribute in the markup, or dark rules in a framework's CSS, prove nothing on their own. When the app ships one mode, it shoots that mode only. Never set a theme attribute or class that the app's own code does not set.
+- **Say which modes you captured.** Every shot carries a `colorModes` field. Copy it into the card or sheet data as it is. Its note prints in the footer, such as "Dark mode: not supported, captured light only." When an app has a dark mode the check missed, find the control that switches it and pass `--theme-toggle`. An app that keeps the choice only in a saved account setting, with no control on the page, shows one mode per sign-in: capture once with a light account's `--cookies` and once with a dark one's, and each run reports the mode it saw.
 - **2x, with room around the content.** A shot keeps enough of the surrounding screen to show where the content sits: the controls beside it and the section it belongs to. It does not need the full window. The default `--margin` gives a `--selector` crop that room; raise it if the neighbours still do not show. Never upscale a shot.
 - **Element shots go through `capture.mjs`.** A browser tool's own element screenshot, such as Playwright's `locator.screenshot`, crops flush to the element with no margin. Do not use one for review material.
 - **Before comes from `main`.** Add a worktree of `origin/main`, run its dev server on another port, and capture it with the same arguments and `--name <screen>-before`.
@@ -78,7 +79,7 @@ The capture rules:
 - **No focus ring a person never sees.** A state that a script opened (a dialog, a menu) keeps focus where the script put it, and the shot draws its ring. Pass `--blur`, unless the state you show is the focus state itself.
 - **Never send a stale frame.** If you must use the Claude desktop browser pane (for example, no cookies for a signed-in page), make the pane visible and take a fresh screenshot after it repaints. A hidden pane does not repaint, so a shot taken while it is hidden can show an old or blurred frame.
 - **Sandbox blocked.** On a Linux host that blocks unprivileged user namespaces (Ubuntu 23.10 and later), Chromium has no usable sandbox. `capture.mjs` then retries once with `--no-sandbox` and prints a note. Capture only pages you trust: your own dev server, `main`, and the templates.
-- **Zoom crops for each changed element.** Crop the element itself with `--selector` and a small `--margin` (8 to 14), before and after, both themes. These show the change large. A zoom is the one shot that may sit tight, because the whole-screen pair of the same element carries the context, so never send a zoom without that pair.
+- **Zoom crops for each changed element.** Crop the element itself with `--selector` and a small `--margin` (8 to 14), before and after, in each mode. These show the change large. A zoom is the one shot that may sit tight, because the whole-screen pair of the same element carries the context, so never send a zoom without that pair.
 - **Guide shots for an alignment or spacing fix.** Draw a guide at the reference the fix aims for, such as `--guide '.file-zoom:middle'` for icons meant to sit on the zoom control's middle, so the off-centre ink shows against the line. The guide is measured from the page; never draw one by eye or by hand. Crop to the row with `--selector` and a small `--margin`, at `--scale 4`, so a 1px offset spans 4 image pixels. Keep that crop at most 556 CSS px wide, so the card shows it at full size. A guide for an element in an open modal dialog or popover is drawn above it. Shoot before and after with the same arguments.
 - **`--selector` takes the first match.** A class that a parent row also carries matches the parent. Narrow it with `:has()` or a more specific path.
 - **An element inside its own scrolling pane, below the fold,** can crop to the wrong region. Use a taller `--viewport`, such as `1280x1600`.
@@ -120,9 +121,9 @@ Those belong in the PR body. The full sheet keeps its own section for impossible
 The quick card is one image. Every state goes in it, each with a title and a look-for line, under the summary. Never send the shots as separate files.
 
 1. Write the card data as `<scratch>/card.json`, beside `shots/`.
-2. Fill in `ref` (the PR), `status`, `title`, a plain `summary` of one to three sentences (see Write for a Designer), `viewport`, `source` (the before and after commits), `beforeLabel` and `afterLabel` (the column names, such as `Before (main)` and `After (feat/attach)`), and `captured`. Then add the shots:
-   - `screens`: one entry per changed screen, with `before` and `after` in both themes. Leave `before` out for a new screen.
-   - `guides`: one entry per guide shot set, as `{ "label", "lookFor", "guide", "rows" }`. `guide` names what the blue line marks, such as "Middle of the zoom control (.file-zoom)"; the card draws it as a legend, since a label in the shot would cover the controls. `rows` stacks the shots in one column, in this order, each with its `label` and `src`: `Before (light)`, `After (light)`, `Before (dark)`, `After (dark)`. The eye then moves only down the line.
+2. Fill in `ref` (the PR), `status`, `title`, a plain `summary` of one to three sentences (see Write for a Designer), `viewport`, `source` (the before and after commits), `colorModes` (from the capture output), `beforeLabel` and `afterLabel` (the column names, such as `Before (main)` and `After (feat/attach)`), and `captured`. Then add the shots:
+   - `screens`: one entry per changed screen, with `before` and `after` in each captured mode. Leave `before` out for a new screen.
+   - `guides`: one entry per guide shot set, as `{ "label", "lookFor", "guide", "rows" }`. `guide` names what the blue line marks, such as "Middle of the zoom control (.file-zoom)"; the card draws it as a legend, since a label in the shot would cover the controls. `rows` stacks the shots in one column, in this order, each with its `label` and `src`: `Before (light)`, `After (light)`, then `Before (dark)` and `After (dark)` when the app ships dark. The eye then moves only down the line.
    - `states`: every other state from the inventory, as `{ "label", "lookFor", "light", "dark" }`. They render as a grid, `columns` across (default 2; use 3 for small crops, 1 for wide screens).
 
    Every screen and state has a `lookFor` line that names the element and the change, for example "The paperclip button left of Send, and the 1 badge on it after a file is added." Then run `fill.mjs` with `assets/card.html` to make `<scratch>/card.html`.
@@ -142,11 +143,11 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 
 1. Write the sheet data as `<scratch>/sheet.json`, beside `shots/`, and run `fill.mjs` with `assets/sheet.html` and a `--title` of two to four words. The template has no doctype, `html`, `head`, or `body`, because the Artifact tool adds its own; do not add them.
 2. The data's fields:
-   - `ref`, `status`, `round`, `title`, `summary`, `viewport`, `source`. Write the `summary` and every `lookFor` line as Write for a Designer says. Leave out `captured`: the bake sets it from the shot files' times.
+   - `ref`, `status`, `round`, `title`, `summary`, `viewport`, `source`, and `colorModes` from the capture output, which sets the theme columns and the footer note. Write the `summary` and every `lookFor` line as Write for a Designer says. Leave out `captured`: the bake sets it from the shot files' times.
    - `beforeLabel` and `afterLabel`: the column names for before and after. Name the real commits or branches, such as `Before (main @ 1a2b3c4)`; a sheet made after merge must not say "this branch".
    - `changes`: what changed since the last round. Round 1 leaves it empty.
    - `colors`: one row per changed colour per theme: `token`, `where` (the places it is used), `theme`, `surface` (what it sits on), `target` (the ratio it must meet: 4.5 for text, 3 for large text and icons, or the target the repo sets), and `before` and `after` (leave `before` out for a colour on a new element), each with a `text` colour, an opaque `ground` colour, and an optional see-through `tint` laid over the ground. The sheet computes every ratio from these values. Never type a ratio, and never read one off a screenshot. Leave it empty when no colour changed.
-   - `zooms`: one entry per changed element: `label`, `lookFor`, and `before` and `after` crops in both themes. They show every captured pixel, so the change reads large. Guide shots go here too, with a `lookFor` that names what the blue line marks.
+   - `zooms`: one entry per changed element: `label`, `lookFor`, and `before` and `after` crops in each captured mode. They show every captured pixel, so the change reads large. Guide shots go here too, with a `lookFor` that names what the blue line marks.
    - `beforeAfter`: each changed screen, before from `main` and after from the branch, each with a `lookFor` line. With zooms present, these are the context.
    - `interactive`: one entry per element whose states need a pointer or the keyboard: hover, press, focus, a drag target, a menu that opens. See Interactive States below. Leave it empty for a change a screenshot shows in full.
    - `states`: every state from the inventory, by screen, with its `source` label.
@@ -185,7 +186,7 @@ The quick card is one image. Every state goes in it, each with a title and a loo
 
 ### Interactive States
 
-A shot cannot show what happens under the pointer. For such a change, rebuild the element in HTML and CSS over a real 2x shot of its screen. The sheet then shows it twice: live, so the reviewer can hover, press, and tab to it in both themes, and frozen once per state, side by side, so the states compare at a glance and `capture.mjs` can shoot them.
+A shot cannot show what happens under the pointer. For such a change, rebuild the element in HTML and CSS over a real 2x shot of its screen. The sheet then shows it twice: live, so the reviewer can hover, press, and tab to it in each mode, and frozen once per state, side by side, so the states compare at a glance and `capture.mjs` can shoot them.
 
 Each `interactive` entry:
 
@@ -201,7 +202,7 @@ Each `interactive` entry:
 }
 ```
 
-- **Background.** Capture the screen without the element, or with it at rest, at `width` by `height` CSS pixels (2x on disk), in both themes.
+- **Background.** Capture the screen without the element, or with it at rest, at `width` by `height` CSS pixels (2x on disk), in each mode the app ships.
 - **Overlay.** Place it absolutely within the stage. Use the product's own markup and CSS where they can run in a page, and a stand-in only where they cannot, such as controls the operating system draws. The stage carries `light` or `dark` as a class for theme rules. The CSS is scoped to its entry.
 - **States.** Write each state rule twice in one selector: the real pseudo-class and its class, as `:hover, .is-hover`, `:active, .is-press`, and `:focus-visible, .is-focus`. A frozen copy adds the class to every element its `target` matches, and it is inert: it takes neither the pointer nor keyboard focus, so only the live row reacts.
 - **Say what is not real.** Fill `standIn` every time. The reviewer must know which pixels are the product and which the page drew.
@@ -237,11 +238,12 @@ The comment names the before and after commits and says when the data is made up
 
 | File | Purpose |
 |---|---|
-| `scripts/capture.mjs` | Headless capture: fixed viewports, 2x or 4x, both themes, crop, measured guide lines, broken-image and page-error report. |
+| `scripts/capture.mjs` | Headless capture: fixed viewports, 2x or 4x, the colour modes the app ships, crop, measured guide lines, broken-image and page-error report. |
 | `scripts/fill.mjs` | Fills a template's JSON block from a data file through the shell, so no editor tool writes the `.html`. |
 | `scripts/bake-sheet.mjs` | Renders a filled sheet headless into static HTML with every shot inline and no script, and fails a sheet that is not self-contained. |
 | `scripts/lib/sheet-check.mjs` | The self-contained check `bake-sheet.mjs` runs: no relative image, lazy load, or script. |
 | `scripts/open-sheet.sh` | Opens a published sheet once per URL by the reviewer's chosen mode, and always prints its link. |
+| `scripts/lib/color-modes.mjs` | Finds the colour modes a page ships and how to reach each one, shared with `ui-inspect`. |
 | `scripts/lib/page.mjs` | Viewports, themes, and page setup, shared with `ui-inspect` so both see the same page. |
 | `scripts/lib/launch-browser.mjs` | Picks the browser, retries once with `--no-sandbox` where a Linux host blocks the sandbox, and retries once with a fresh profile when Chrome hangs at start. |
 | `scripts/lib/playwright-chromium.mjs` | Finds a Chromium that Playwright downloaded, for hosts with no installed Chrome. |

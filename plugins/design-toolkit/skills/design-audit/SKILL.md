@@ -1,6 +1,6 @@
 ---
 name: design-audit
-description: Audits an existing site or app screen for generic, AI-made patterns and broken details, and reports what is wrong and how to fix it, in the order to fix it. It reads the source for tells (stock copy, emoji as UI, violet accents, gradient text, alert boxes, dead links), measures the rendered page with ui-inspect, captures it in light and dark, and leaves the visual critique to the reviewer, who judges the shots. It reports and never edits. Use before a redesign, when a page "looks AI-made" or generic, or on "audit this page", "what's wrong with this UI", "design review of the current screen". Do NOT use to review a change (that is design-spec) or to make the fixes.
+description: Audits an existing site or app screen for generic, AI-made patterns and broken details, and reports what is wrong and how to fix it, in the order to fix it. It reads the source for tells (stock copy, emoji as UI, violet accents, gradient text, alert boxes, dead links), measures the rendered page with ui-inspect, captures it in each colour mode it ships, and leaves the visual critique to the reviewer, who judges the shots. It reports and never edits. Use before a redesign, when a page "looks AI-made" or generic, or on "audit this page", "what's wrong with this UI", "design review of the current screen". Do NOT use to review a change (that is design-spec) or to make the fixes.
 ---
 
 # Design Audit
@@ -24,12 +24,12 @@ node <skill>/scripts/audit.mjs --url http://localhost:5173/settings --src ./web/
 
 The script:
 
-1. Captures the whole page (its full scroll width and height) at each `--viewport` (default `desktop` and `narrow`) in light and dark, with design-spec's `capture.mjs --full-page`. Content inside its own scrolling pane shows only where the pane rests.
+1. Captures the whole page (its full scroll width and height) at each `--viewport` (default `desktop` and `narrow`) in each colour mode the page ships, with design-spec's `capture.mjs --full-page`. Content inside its own scrolling pane shows only where the pane rests.
 2. Runs ui-inspect for the measured faults: overflow, clipped or covered text, contrast, fonts, sizes. An error the page logs while loading becomes a `page-error` finding.
 3. Lints the source under each `--src` folder for tells, if you give one. It lists every file and line.
 4. Puts each finding in the fix order and writes `audit.json` and `card.json` to `--out`. A measured finding names the shot for each viewport and theme it appeared at. A source finding names its files and lines: many source tells, such as a transition or a z-index, show in no shot. Both files record how many source files were scanned, and any skipped, so an empty scan never reads as a clean one.
 
-Without `--out`, it writes to a fresh temp folder and prints the path, so an audit run from a repo never writes into it. It takes the same page options as ui-inspect: `--theme-attr`, `--cookies`, `--wait-for`, `--settle`, `--blur`, and `--ignore`. The linter also runs alone: `node <skill>/scripts/lint.mjs <dir> [--mode site] [--json]`.
+Without `--out`, it writes to a fresh temp folder and prints the path, so an audit run from a repo never writes into it. It takes the same page options as ui-inspect: `--theme`, `--theme-toggle`, `--cookies`, `--wait-for`, `--settle`, `--blur`, and `--ignore`. The linter also runs alone: `node <skill>/scripts/lint.mjs <dir> [--mode site] [--json]`.
 
 ### Edge Cases and Native Apps
 
