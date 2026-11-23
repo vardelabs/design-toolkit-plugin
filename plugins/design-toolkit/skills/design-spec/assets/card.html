@@ -16,6 +16,7 @@
   "summary": "People can now attach a file from the composer. The paperclip button opens the file picker, and a badge shows how many files are attached.",
   "viewport": "1280x800",
   "source": "before: main @ 1a2b3c4, after: feat/attach @ 5d6e7f8",
+  "colorModes": { "modes": ["light", "dark"], "note": "Dark mode: follows the system setting, captured light and dark." },
   "beforeLabel": "Before (main)",
   "afterLabel": "After (feat/attach)",
   "captured": "2026-10-16 14:02",
@@ -251,7 +252,7 @@
     if ((data.states || []).length) card.append(statesGrid(data.states));
     if ((data.findings || []).length) card.append(findingsBlock(data.findings));
     const footer = el('footer');
-    footer.append(el('span', '', `${data.viewport} at 2x. ${data.source}`), el('span', '', `Captured ${data.captured}`));
+    footer.append(el('span', '', `${data.viewport} at 2x. ${data.source}${data.colorModes ? `. ${data.colorModes.note}` : ''}`), el('span', '', `Captured ${data.captured}`));
     card.append(footer);
   }
 

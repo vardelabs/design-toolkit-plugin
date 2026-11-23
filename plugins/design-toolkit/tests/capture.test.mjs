@@ -18,7 +18,6 @@ const FIXTURE = `<!doctype html><html><head><style>
   #box { position: absolute; left: 100px; top: 100px; width: 200px; height: 120px; background: #0a0; }
   #attr { position: absolute; left: 400px; top: 100px; width: 50px; height: 50px; background: #00a; }
   @media (prefers-color-scheme: dark) { body { background: #000; } #box { background: #a00; } }
-  :root[data-theme="dark"] #attr { background: #fa0; }
 </style></head><body><div id="box"></div><div id="attr"></div></body></html>`;
 
 function capture(args) {
@@ -70,15 +69,145 @@ test('light and dark come from prefers-color-scheme', { skip: NO_CHROME }, () =>
   const dir = workdir();
   const [light, dark] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#box', '--viewport', '800x600']);
   assert.notDeepEqual(readFileSync(light.file), readFileSync(dark.file));
+  assert.equal(light.colorModes.note, 'Dark mode: follows the system setting, captured light and dark.');
 });
 
-test('--theme-attr reaches a theme set by an attribute, not the media query', { skip: NO_CHROME }, () => {
+const BOX = '<div id="box" style="position:absolute;left:100px;top:100px;width:200px;height:120px;background:#0a0"></div>';
+const NO_DARK = `<!doctype html><html><body style="margin:0;background:#fff">${BOX}</body></html>`;
+const INERT_DARK_RULE = `<!doctype html><html><head><style>
+  body { margin: 0; background: #fff; }
+  @media (prefers-color-scheme: dark) { .not-on-this-page { color: #fff; } }
+</style></head><body>${BOX}</body></html>`;
+// A template that hard-sets light on a framework whose CSS also ships a dark theme, as Tabler does.
+const HARD_SET_LIGHT = `<!doctype html><html lang="en" data-bs-theme="light"><head><style>
+  :root, [data-bs-theme="light"] { --page-bg: #fff; }
+  [data-bs-theme="dark"] { --page-bg: #1a1d21; }
+  body { margin: 0; background: var(--page-bg); }
+</style></head><body>${BOX}</body></html>`;
+const toggleFixture = (onClick) => `<!doctype html><html data-theme="light"><head><style>
+  body { margin: 0; background: #fff; }
+  [data-theme="dark"] body { background: #111; }
+</style><script>
+  if (localStorage.theme) document.documentElement.dataset.theme = localStorage.theme;
+</script></head><body>${BOX}<button id="toggle" onclick="${onClick}">Theme</button></body></html>`;
+const SAVED_TOGGLE = toggleFixture("document.documentElement.dataset.theme = localStorage.theme = 'dark'");
+
+function writePage(dir, name, html) {
+  writeFileSync(join(dir, name), html);
+  return join(dir, name);
+}
+
+// The red channel of a crop's top-left pixel, which a #box crop with a margin takes from the page ground.
+function groundRed(file) {
+  return pngRows(file).rows[0][0];
+}
+
+test('a page with no dark mode is captured in light only, and the shot says so', { skip: NO_CHROME }, () => {
   const dir = workdir();
-  const args = ['--url', join(dir, 'fixture.html'), '--out', dir, '--selector', '#attr', '--margin', '0', '--viewport', '800x600'];
-  const [plainLight, plainDark] = capture([...args, '--name', 'plain']);
-  const [attrLight, attrDark] = capture([...args, '--name', 'attr', '--theme-attr', 'data-theme']);
-  assert.deepEqual(readFileSync(plainLight.file), readFileSync(plainDark.file));
-  assert.notDeepEqual(readFileSync(attrLight.file), readFileSync(attrDark.file));
+  const url = writePage(dir, 'plain.html', NO_DARK);
+  const shots = capture(['--url', url, '--out', dir, '--selector', '#box', '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light']);
+  assert.equal(shots[0].colorModes.note, 'Dark mode: not supported, captured light only.');
+  assert.equal(shots[0].colorModes.detail, 'The page reads light with either colour scheme requested.');
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', url, '--out', dir, '--theme', 'dark'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /--theme dark: Dark mode: not supported/);
+});
+
+test('a template that hard-sets light is captured light only, though its framework CSS has a dark theme', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'hard-set.html', HARD_SET_LIGHT);
+  const shots = capture(['--url', url, '--out', dir, '--selector', '#box', '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light']);
+  assert.equal(groundRed(shots[0].file), 255);
+  const forced = spawnSync(process.execPath, [CAPTURE, '--url', url, '--out', dir, '--theme-attr', 'data-bs-theme'], { encoding: 'utf8' });
+  assert.equal(forced.status, 1);
+  assert.match(forced.stderr, /Unknown option '--theme-attr'/);
+});
+
+test('a dark theme in oklch, the computed syntax Tailwind v4 leaves, counts as a dark mode', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'oklch.html', `<!doctype html><html><head><style>
+    body { margin: 0; background: oklch(0.98 0 0); }
+    @media (prefers-color-scheme: dark) { body { background: oklch(0.2 0 0); } }
+  </style></head><body>${BOX}</body></html>`);
+  const shots = capture(['--url', url, '--out', dir, '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light', 'dark']);
+});
+
+test('a dark mode counts when a hero is dark over the first screen in both modes', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'hero.html', `<!doctype html><html><head><style>
+    body { margin: 0; background: #fff; }
+    @media (prefers-color-scheme: dark) { body { background: #111; } }
+    .hero { height: 100vh; background: #1b1b1b; }
+  </style></head><body><div class="hero"></div><p>Featured articles</p></body></html>`);
+  const shots = capture(['--url', url, '--out', dir, '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light', 'dark']);
+});
+
+test('a dark mode painted as a gradient on <body> counts', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'gradient.html', `<!doctype html><html><head><style>
+    body { margin: 0; background: #fff; }
+    @media (prefers-color-scheme: dark) { body { background-image: linear-gradient(#111, #222); } }
+  </style></head><body>${BOX}</body></html>`);
+  assert.deepEqual(capture(['--url', url, '--out', dir, '--viewport', '800x600']).map((s) => s.theme), ['light', 'dark']);
+});
+
+test('--theme narrows the run, and the report names only the modes it captured', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const [shot, more] = capture(['--url', join(dir, 'fixture.html'), '--out', dir, '--viewport', '800x600', '--theme', 'light']);
+  assert.equal(more, undefined);
+  assert.deepEqual(shot.colorModes.modes, ['light']);
+  assert.equal(shot.colorModes.note, 'Dark mode: follows the system setting, captured light only.');
+});
+
+test('a page that renders dark for a light request and light for a dark one gets each shot under its real mode', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'inverted.html', `<!doctype html><html><head><style>
+    body { margin: 0; background: #111; }
+    @media (prefers-color-scheme: dark) { body { background: #fff; } }
+  </style></head><body>${BOX}</body></html>`);
+  const shots = capture(['--url', url, '--out', dir, '--selector', '#box', '--margin', '10', '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => [s.theme, groundRed(s.file)]), [['light', 255], ['dark', 0x11]]);
+});
+
+test('a root change that is not darker never counts as a dark mode, from the system setting or a toggle', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const lighter = writePage(dir, 'lighter.html', `<!doctype html><html><head><style>
+    body { margin: 0; background: #ececec; }
+    @media (prefers-color-scheme: dark) { body { background: #fff; } }
+  </style></head><body>${BOX}</body></html>`);
+  const shots = capture(['--url', lighter, '--out', dir, '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light']);
+  const toggle = writePage(dir, 'lighter-toggle.html', `<!doctype html><html><body style="margin:0;background:#ececec">${BOX}<button id="toggle" onclick="document.body.style.background = '#fff'">Theme</button></body></html>`);
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', toggle, '--out', dir, '--theme-toggle', '#toggle'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /did not change the page's colours/);
+});
+
+test('a prefers-color-scheme rule that changes nothing on the page does not count as a dark mode', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const shots = capture(['--url', writePage(dir, 'inert.html', INERT_DARK_RULE), '--out', dir, '--viewport', '800x600']);
+  assert.deepEqual(shots.map((s) => s.theme), ['light']);
+  assert.match(shots[0].colorModes.detail, /it has 1 prefers-color-scheme rule, and none changes it/);
+});
+
+test('--theme-toggle reaches dark through the app\'s own control, and a saved choice never leaks into a light shot', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const shots = capture(['--url', writePage(dir, 'toggle.html', SAVED_TOGGLE), '--out', dir, '--selector', '#box', '--margin', '10', '--viewport', '800x600', '--viewport', '900x600', '--theme-toggle', '#toggle']);
+  assert.deepEqual(shots.map((s) => `${s.viewport}/${s.theme}`), ['800x600/light', '800x600/dark', '900x600/light', '900x600/dark']);
+  assert.deepEqual(shots.map((s) => groundRed(s.file)), [255, 0x11, 255, 0x11]);
+  assert.equal(shots[0].colorModes.note, "Dark mode: switched with the app's own control, captured light and dark.");
+});
+
+test('a --theme-toggle that does not change the page\'s colours fails', { skip: NO_CHROME }, () => {
+  const dir = workdir();
+  const url = writePage(dir, 'dead-toggle.html', toggleFixture("this.textContent = 'Clicked'"));
+  const run = spawnSync(process.execPath, [CAPTURE, '--url', url, '--out', dir, '--theme-toggle', '#toggle'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /--theme-toggle #toggle did not change the page's colours/);
 });
 
 test('a selector that matches nothing fails loudly', { skip: NO_CHROME }, () => {
@@ -251,18 +380,45 @@ function sheetData() {
   return JSON.parse(/<script type="application\/json" id="sheet-data">([\s\S]*?)<\/script>/.exec(readFileSync(join(SKILL, 'assets', 'sheet.html'), 'utf8'))[1]);
 }
 
-async function inSheet(data, probe) {
+async function inTemplate(template, blockId, data, probe) {
   const dir = workdir();
-  fillTemplate(dir, 'sheet.html', 'sheet-data', data);
+  fillTemplate(dir, template, blockId, data);
   const browser = await launchBrowser({ warn: () => {} });
   try {
     const page = await browser.newPage();
-    await page.goto(pathToFileURL(join(dir, 'sheet.html')).href, { timeoutMs: 5000, settleMs: 0 });
+    await page.goto(pathToFileURL(join(dir, template)).href, { timeoutMs: 5000, settleMs: 0 });
     return await page.eval(probe);
   } finally {
     await browser.close();
   }
 }
+
+const inSheet = (data, probe) => inTemplate('sheet.html', 'sheet-data', data, probe);
+
+const LIGHT_ONLY = { modes: ['light'], note: 'Dark mode: not supported, captured light only.' };
+
+test('a light-only sheet draws no dark column and prints the colour-mode note', { skip: NO_CHROME }, async () => {
+  const shot = { light: 'shots/none.png' };
+  const data = {
+    ...sheetData(), colorModes: LIGHT_ONLY, interactive: [],
+    beforeAfter: [{ label: 'Box', before: shot, after: shot }],
+    zooms: [{ label: 'Box', lookFor: 'The box.', before: shot, after: shot }],
+    states: [{ screen: 'Box', items: [{ label: 'Default', source: 'Real server', ...shot }] }],
+  };
+  const shown = await inSheet(data, () => ({
+    notCaptured: [...document.querySelectorAll('.none')].filter((n) => n.textContent === 'Not captured').length,
+    darkHeads: [...document.querySelectorAll('.colhead')].filter((h) => /dark/i.test(h.textContent)).length,
+    footnote: [...document.querySelectorAll('.footnote')].pop().textContent,
+  }));
+  assert.deepEqual({ notCaptured: shown.notCaptured, darkHeads: shown.darkHeads }, { notCaptured: 0, darkHeads: 0 });
+  assert.match(shown.footnote, / Dark mode: not supported, captured light only\.$/);
+});
+
+test('the card footer prints the colour-mode note', { skip: NO_CHROME }, async () => {
+  const data = JSON.parse(/<script type="application\/json" id="card-data">([\s\S]*?)<\/script>/.exec(readFileSync(join(SKILL, 'assets', 'card.html'), 'utf8'))[1]);
+  const footer = await inTemplate('card.html', 'card-data', { ...data, colorModes: LIGHT_ONLY }, () => document.querySelector('footer').textContent);
+  assert.match(footer, /5d6e7f8\. Dark mode: not supported, captured light only\./);
+});
 
 // Two entries that share a class name with different CSS, so a rule that leaks from one to the other shows.
 function interactiveItem(label, colour, states) {

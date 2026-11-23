@@ -531,7 +531,8 @@ test('optical-align fails only the wrapped icon 1.25px low, and the excepted car
   assert.equal(run.status, 1, run.stderr);
   assert.equal(report.config, realpathSync(config));
   const align = report.findings.filter((f) => f.id === 'optical-align');
-  assert.deepEqual(align.map((f) => [f.level, f.selectors, f.where.length]), [['FAIL', ['div.row.notice > span.glyph'], 4]]);
+  assert.match(report.colorModes.note, /^Dark mode: not supported, captured light only\./);
+  assert.deepEqual(align.map((f) => [f.level, f.selectors, f.where.length]), [['FAIL', ['div.row.notice > span.glyph'], 2]]);
   const gap = Number(/"Notice one quarter low" \(div\.row\.notice > span\.glyph\) ([\d.]+)px low against the cap height/.exec(align[0].message)?.[1]);
   // The oracle and the ink each snap to the 2x device grid, which differs by host font: one device pixel.
   assert.ok(Math.abs(gap - 1.25) <= 0.5, align[0].message);

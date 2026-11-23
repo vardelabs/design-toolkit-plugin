@@ -15,7 +15,7 @@ Make each pass on its own.
 5. **Fresh frame.** No blur, no half-painted layout, no fallback font, no spinner unless the state is the loading state. The capture time is later than the last commit it shows.
 6. **No stray focus ring.** A dialog or menu that a script opened shows no focus ring, unless the state is the focus state. Recapture with `--blur`.
 7. **Crop.** Each shot keeps enough of the surrounding screen to show where the content sits. It does not need the full window. A crop flush to its content fails: recapture it with `capture.mjs` and its default `--margin`. A zoom may sit tight when the material also holds the whole-screen pair of the same element. The content is not cut at an edge unless the component itself is cut at that width.
-8. **Themes.** Both themes for every state, and the dark shot is really dark.
+8. **Themes.** Each colour mode the app ships, for every state, and each shot is really in its mode. No shot shows a mode the app lacks, and the footer note names the modes captured.
 9. **Inventory.** Every inventoried state is present, or listed under Removed as Impossible with its citation. No state comes from a mock the server cannot produce.
 10. **Legibility.** At 100% zoom, the text in each shot reads. No shot is upscaled.
 11. **Honesty.** Fixtures are labeled as fixtures. No check is claimed that did not run.
